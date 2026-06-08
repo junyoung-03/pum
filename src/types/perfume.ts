@@ -9,17 +9,21 @@ export interface Perfume {
   name: string;
   brand: string;
   category: Category;
+  noteFamily: string;
   mood: Mood[];
+  moodTags: string[];
   season: Season[];
   purpose: Purpose[];
   price: PriceLevel;
   description: string;
+  highlight: string;
   topNote: string[];
   middleNote: string[];
   baseNote: string[];
   image: string;
   color: string;
   shortCopy: string;
+  featured?: boolean;
 }
 
 export interface RecommendAnswers {

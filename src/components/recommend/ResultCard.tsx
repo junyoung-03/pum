@@ -3,6 +3,7 @@ import { Perfume, RecommendAnswers } from '../../types/perfume';
 import Badge from '../common/Badge';
 import Button from '../common/Button';
 import NoteList from '../perfume/NoteList';
+import PerfumeImage from '../perfume/PerfumeImage';
 
 interface ResultCardProps {
   perfume: Perfume;
@@ -30,21 +31,11 @@ export default function ResultCard({
 
       <div className="result-content">
         <div className="result-perfume-image">
-          <div 
+          <PerfumeImage
+            perfume={perfume}
             className="result-image-placeholder"
-            style={{ background: perfume.color }}
-          >
-            <div className="perfume-bottle-icon large">
-              <svg viewBox="0 0 60 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="20" y="0" width="20" height="15" rx="2" fill="currentColor" opacity="0.6"/>
-                <rect x="22" y="15" width="16" height="5" fill="currentColor" opacity="0.4"/>
-                <path d="M10 25 L50 25 L55 90 Q55 95 50 95 L10 95 Q5 95 5 90 L10 25Z" 
-                      fill="currentColor" opacity="0.3"/>
-                <path d="M15 35 L45 35 L48 85 Q48 88 45 88 L15 88 Q12 88 12 85 L15 35Z" 
-                      fill="currentColor" opacity="0.15"/>
-              </svg>
-            </div>
-          </div>
+            size="large"
+          />
         </div>
 
         <div className="result-perfume-info">
@@ -57,8 +48,8 @@ export default function ResultCard({
           <h3 className="result-name">{perfume.name}</h3>
           
           <div className="result-badges">
-            <Badge variant="category">{perfume.category}</Badge>
-            {perfume.mood.slice(0, 2).map((m) => (
+            <Badge variant="category">{perfume.noteFamily}</Badge>
+            {perfume.moodTags.slice(0, 2).map((m) => (
               <Badge key={m} variant="mood">{m}</Badge>
             ))}
           </div>

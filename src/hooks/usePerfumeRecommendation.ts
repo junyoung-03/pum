@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Perfume, RecommendAnswers } from '../types/perfume';
+import { RecommendAnswers } from '../types/perfume';
 import { perfumeData } from '../data/perfumeData';
 import { calculateRecommendation } from '../utils/recommendation';
 

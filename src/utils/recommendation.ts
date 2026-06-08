@@ -1,4 +1,4 @@
-import { Perfume, RecommendAnswers, Mood, Season, Purpose, Category } from '../types/perfume';
+import { Perfume, RecommendAnswers, Mood, Season, Purpose } from '../types/perfume';
 
 interface RecommendationResult {
   perfume: Perfume;
@@ -51,20 +51,19 @@ export function calculateRecommendation(
       perfume: perfumes[0],
       score: 50,
       matchedCriteria: ['기본 추천'],
-      reason: generateReason(answers, perfumes[0], ['기본 추천'])
+      reason: generateReason(answers, perfumes[0])
     };
   }
 
   return {
     ...best,
-    reason: generateReason(answers, best.perfume, best.matchedCriteria)
+    reason: generateReason(answers, best.perfume)
   };
 }
 
 function generateReason(
   answers: RecommendAnswers,
-  perfume: Perfume,
-  matchedCriteria: string[]
+  perfume: Perfume
 ): string {
   const parts: string[] = [];
   
@@ -87,7 +86,7 @@ function generateReason(
 
   const brandText = `${perfume.brand}의 ${perfume.name}은(는)`;
   
-  const moodDesc = perfume.mood.slice(0, 2).join(', ');
+  const moodDesc = perfume.moodTags.slice(0, 2).join(', ');
   const purposeDesc = perfume.purpose.join(' 또는 ');
 
   return `${criteriaText} ${brandText} ${moodDesc} 무드를 연출하며, ${purposeDesc} 상황에 특히 잘 어울리는 향수입니다.`;
