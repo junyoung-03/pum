@@ -7,7 +7,12 @@ interface PerfumeImageProps {
 }
 
 function hasImageSrc(image: string) {
-  return image.startsWith('/');
+  return image.startsWith('/') || image.startsWith('images/');
+}
+
+function getImageSrc(image: string) {
+  const path = image.startsWith('/') ? image.slice(1) : image;
+  return `${import.meta.env.BASE_URL}${path}`;
 }
 
 export default function PerfumeImage({
@@ -18,7 +23,7 @@ export default function PerfumeImage({
   if (hasImageSrc(perfume.image)) {
     return (
       <img
-        src={perfume.image}
+        src={getImageSrc(perfume.image)}
         alt={`${perfume.brand} ${perfume.name}`}
         className={`perfume-photo ${className}`.trim()}
         loading="lazy"
