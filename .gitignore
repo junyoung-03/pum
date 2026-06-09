@@ -1,4 +1,7 @@
-node_modules/ 
-dist/ 
-.env 
-pum/ 
+node_modules/
+dist/
+.env
+pum/
+vite.config.js
+vite.config.d.ts
+*.tsbuildinfo
