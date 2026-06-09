@@ -1,11 +1,10 @@
 import { useReducer, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RecommendAnswers } from '../types/perfume';
+import { useDispatch } from 'react-redux';
+import { RecommendAnswers } from '../data/perfumeData';
 import { questionData } from '../data/questionData';
-import ProgressBar from '../components/recommend/ProgressBar';
-import QuestionCard from '../components/recommend/QuestionCard';
-import OptionCard from '../components/recommend/OptionCard';
-import Button from '../components/common/Button';
+import { setAnswers } from '../data/store';
+import { Button } from '../components/shared';
 
 interface State {
   step: number;
@@ -55,23 +54,23 @@ function reducer(state: State, action: Action): State {
   }
 }
 
-export default function Recommend() {
+export default function RecommendPage() {
   const navigate = useNavigate();
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const dispatch = useDispatch();
+  const [state, reducerDispatch] = useReducer(reducer, initialState);
   const [error, setError] = useState('');
 
   const currentQuestion = questionData.find((q) => q.id === state.step);
   const isLastStep = state.step === questionData.length;
-  const currentAnswer = currentQuestion 
-    ? state.answers[currentQuestion.key] 
-    : '';
+  const currentAnswer = currentQuestion ? state.answers[currentQuestion.key] : '';
+  const percentage = (state.step / questionData.length) * 100;
 
   const handleOptionSelect = (value: string) => {
     if (currentQuestion) {
-      dispatch({ 
-        type: 'SET_ANSWER', 
-        key: currentQuestion.key, 
-        value: value as never 
+      reducerDispatch({
+        type: 'SET_ANSWER',
+        key: currentQuestion.key,
+        value: value as never
       });
       setError('');
     }
@@ -82,12 +81,12 @@ export default function Recommend() {
       setError('옵션을 선택해 주세요.');
       return;
     }
-    dispatch({ type: 'NEXT_STEP' });
+    reducerDispatch({ type: 'NEXT_STEP' });
     setError('');
   };
 
   const handlePrev = () => {
-    dispatch({ type: 'PREV_STEP' });
+    reducerDispatch({ type: 'PREV_STEP' });
     setError('');
   };
 
@@ -96,7 +95,7 @@ export default function Recommend() {
       setError('옵션을 선택해 주세요.');
       return;
     }
-    sessionStorage.setItem('scentique-answers', JSON.stringify(state.answers));
+    dispatch(setAnswers(state.answers));
     navigate('/result');
   };
 
@@ -112,19 +111,35 @@ export default function Recommend() {
           <p>4가지 질문으로 당신에게 어울리는 향수를 찾아드려요</p>
         </div>
 
-        <ProgressBar current={state.step} total={questionData.length} />
+        <div className="progress-bar-container">
+          <div className="progress-bar-header">
+            <span className="progress-step">
+              STEP {state.step} / {questionData.length}
+            </span>
+            <span className="progress-percentage">{Math.round(percentage)}%</span>
+          </div>
+          <div className="progress-bar-track">
+            <div className="progress-bar-fill" style={{ width: `${percentage}%` }} />
+          </div>
+        </div>
 
         <div className="recommend-content">
-          <QuestionCard question={currentQuestion} />
+          <div className="question-card">
+            <h2>{currentQuestion.title}</h2>
+            <p>{currentQuestion.subtitle}</p>
+          </div>
 
           <div className="options-grid">
             {currentQuestion.options.map((option) => (
-              <OptionCard
+              <button
                 key={option}
-                option={option}
-                isSelected={currentAnswer === option}
+                type="button"
+                className={`option-card ${currentAnswer === option ? 'option-card-selected' : ''}`}
                 onClick={() => handleOptionSelect(option)}
-              />
+              >
+                <span>{option}</span>
+                {currentAnswer === option && <span className="option-check">✓</span>}
+              </button>
             ))}
           </div>
 

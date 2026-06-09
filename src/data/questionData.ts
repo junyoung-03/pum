@@ -1,4 +1,4 @@
-import { RecommendQuestion } from '../types/perfume';
+import { RecommendQuestion } from './perfumeData';
 
 export const questionData: RecommendQuestion[] = [
   {

@@ -15,7 +15,7 @@ export default function Footer() {
           <div className="footer-column">
             <h4>Service</h4>
             <Link to="/recommend">향수 추천</Link>
-            <Link to="/collection">컬렉션</Link>
+            <Link to="/list">컬렉션</Link>
             <Link to="/review">리뷰</Link>
           </div>
           <div className="footer-column">

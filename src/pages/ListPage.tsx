@@ -1,30 +1,26 @@
 import { useState, useMemo } from 'react';
-import { perfumeData } from '../data/perfumeData';
-import { useFavorites } from '../hooks/useFavorites';
-import { Category, Mood } from '../types/perfume';
-import PerfumeGrid from '../components/perfume/PerfumeGrid';
-import SectionTitle from '../components/common/SectionTitle';
-import EmptyState from '../components/common/EmptyState';
+import { perfumeData, Category, Mood } from '../data/perfumeData';
+import PerfumeItem from '../components/PerfumeItem';
+import { SectionTitle, EmptyState } from '../components/shared';
 
 const categories: (Category | 'All')[] = ['All', 'Floral', 'Woody', 'Musk', 'Citrus', 'Amber'];
 const moods: (Mood | '전체')[] = ['전체', '고급스러운', '상큼한', '차분한', '로맨틱한', '세련된', '우아한'];
 
-export default function Collection() {
-  const { favoriteIds, toggleFavorite } = useFavorites();
+export default function ListPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category | 'All'>('All');
   const [selectedMood, setSelectedMood] = useState<Mood | '전체'>('전체');
 
   const filteredPerfumes = useMemo(() => {
     return perfumeData.filter((perfume) => {
-      const matchesSearch = 
+      const matchesSearch =
         perfume.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         perfume.brand.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesCategory = 
+
+      const matchesCategory =
         selectedCategory === 'All' || perfume.category === selectedCategory;
-      
-      const matchesMood = 
+
+      const matchesMood =
         selectedMood === '전체' || perfume.mood.includes(selectedMood);
 
       return matchesSearch && matchesCategory && matchesMood;
@@ -40,8 +36,8 @@ export default function Collection() {
   return (
     <div className="collection-page">
       <div className="container">
-        <SectionTitle 
-          title="Collection" 
+        <SectionTitle
+          title="Collection"
           subtitle="SCENTIQUE가 엄선한 프리미엄 향수 컬렉션"
         />
 
@@ -93,11 +89,11 @@ export default function Collection() {
           </p>
 
           {filteredPerfumes.length > 0 ? (
-            <PerfumeGrid
-              perfumes={filteredPerfumes}
-              favoriteIds={favoriteIds}
-              onToggleFavorite={toggleFavorite}
-            />
+            <div className="perfume-grid">
+              {filteredPerfumes.map((perfume) => (
+                <PerfumeItem key={perfume.id} perfume={perfume} />
+              ))}
+            </div>
           ) : (
             <EmptyState
               icon="🔍"

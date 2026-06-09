@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom';
-import Button from '../components/common/Button';
-import SectionTitle from '../components/common/SectionTitle';
+import { useDispatch, useSelector } from 'react-redux';
 import { featuredPerfumes } from '../data/perfumeData';
-import PerfumeImage from '../components/perfume/PerfumeImage';
-import { useFavorites } from '../hooks/useFavorites';
+import { toggleFavorite } from '../data/store';
+import type { RootState } from '../data/store';
+import { Button, SectionTitle, PerfumeImage } from '../components/shared';
 
-export default function Home() {
-  const { toggleFavorite, isFavorite } = useFavorites();
-  const bestPerfumes = featuredPerfumes;
+export default function HomePage() {
+  const dispatch = useDispatch();
+  const favoriteIds = useSelector((state: RootState) => state.favorite.ids);
 
   const features = [
     {
@@ -46,8 +46,8 @@ export default function Home() {
 
       <section className="features-section">
         <div className="container">
-          <SectionTitle 
-            title="Why SCENTIQUE" 
+          <SectionTitle
+            title="Why SCENTIQUE"
             subtitle="특별한 향수 경험을 위한 세 가지 약속"
           />
           <div className="features-grid">
@@ -64,31 +64,39 @@ export default function Home() {
 
       <section className="best-section">
         <div className="container">
-          <SectionTitle 
-            title="Best Collection" 
+          <SectionTitle
+            title="Best Collection"
             subtitle="가장 사랑받는 시그니처 향수"
           />
           <div className="best-grid">
-            {bestPerfumes.map((perfume) => (
+            {featuredPerfumes.map((perfume) => (
               <article key={perfume.id} className="best-card">
-                <Link to={`/perfume/${perfume.id}`} className="best-card-image">
+                <Link
+                  to={`/detail/${perfume.id}`}
+                  state={{ perfume }}
+                  className="best-card-image"
+                >
                   <PerfumeImage perfume={perfume} className="best-image-placeholder" />
                 </Link>
                 <div className="best-card-content">
                   <p className="best-brand">{perfume.brand}</p>
                   <h3 className="best-name">
-                    <Link to={`/perfume/${perfume.id}`}>{perfume.name}</Link>
+                    <Link to={`/detail/${perfume.id}`} state={{ perfume }}>
+                      {perfume.name}
+                    </Link>
                   </h3>
                   <p className="best-copy">{perfume.shortCopy}</p>
                   <div className="best-card-actions">
                     <button
-                      className={`favorite-btn ${isFavorite(perfume.id) ? 'active' : ''}`}
-                      onClick={() => toggleFavorite(perfume.id)}
+                      className={`favorite-btn ${favoriteIds.includes(perfume.id) ? 'active' : ''}`}
+                      onClick={() => dispatch(toggleFavorite(perfume.id))}
                     >
-                      {isFavorite(perfume.id) ? '♥' : '♡'}
+                      {favoriteIds.includes(perfume.id) ? '♥' : '♡'}
                     </button>
-                    <Link to={`/perfume/${perfume.id}`}>
-                      <Button variant="ghost" size="small">View More</Button>
+                    <Link to={`/detail/${perfume.id}`} state={{ perfume }}>
+                      <Button variant="ghost" size="small">
+                        View More
+                      </Button>
                     </Link>
                   </div>
                 </div>
@@ -96,7 +104,7 @@ export default function Home() {
             ))}
           </div>
           <div className="section-cta">
-            <Link to="/collection">
+            <Link to="/list">
               <Button variant="secondary">전체 컬렉션 보기</Button>
             </Link>
           </div>
