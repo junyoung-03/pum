@@ -1,31 +1,34 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { perfumeData, Category, Mood } from '../data/perfumeData';
+import { toggleFavorite } from '../data/store';
+import type { RootState } from '../data/store';
 import PerfumeItem from '../components/PerfumeItem';
-import { SectionTitle, EmptyState } from '../components/shared';
 
 const categories: (Category | 'All')[] = ['All', 'Floral', 'Woody', 'Musk', 'Citrus', 'Amber'];
 const moods: (Mood | '전체')[] = ['전체', '고급스러운', '상큼한', '차분한', '로맨틱한', '세련된', '우아한'];
 
 export default function ListPage() {
+  const dispatch = useDispatch();
+  const favoriteIds = useSelector((state: RootState) => state.favorite.ids);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category | 'All'>('All');
   const [selectedMood, setSelectedMood] = useState<Mood | '전체'>('전체');
 
-  const filteredPerfumes = useMemo(() => {
-    return perfumeData.filter((perfume) => {
-      const matchesSearch =
-        perfume.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        perfume.brand.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredPerfumes = perfumeData.filter((perfume) => {
+    const matchesSearch =
+      perfume.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      perfume.brand.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesCategory =
-        selectedCategory === 'All' || perfume.category === selectedCategory;
+    const matchesCategory =
+      selectedCategory === 'All' || perfume.category === selectedCategory;
 
-      const matchesMood =
-        selectedMood === '전체' || perfume.mood.includes(selectedMood);
+    const matchesMood =
+      selectedMood === '전체' || perfume.mood.includes(selectedMood);
 
-      return matchesSearch && matchesCategory && matchesMood;
-    });
-  }, [searchQuery, selectedCategory, selectedMood]);
+    return matchesSearch && matchesCategory && matchesMood;
+  });
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -36,10 +39,10 @@ export default function ListPage() {
   return (
     <div className="collection-page">
       <div className="container">
-        <SectionTitle
-          title="Collection"
-          subtitle="SCENTIQUE가 엄선한 프리미엄 향수 컬렉션"
-        />
+        <div className="section-title section-title-center">
+          <h2>Collection</h2>
+          <p>SCENTIQUE가 엄선한 프리미엄 향수 컬렉션</p>
+        </div>
 
         <div className="collection-filters">
           <div className="search-box">
@@ -91,17 +94,23 @@ export default function ListPage() {
           {filteredPerfumes.length > 0 ? (
             <div className="perfume-grid">
               {filteredPerfumes.map((perfume) => (
-                <PerfumeItem key={perfume.id} perfume={perfume} />
+                <PerfumeItem
+                  key={perfume.id}
+                  perfume={perfume}
+                  isFavorite={favoriteIds.includes(perfume.id)}
+                  onToggleFavorite={(id) => dispatch(toggleFavorite(id))}
+                />
               ))}
             </div>
           ) : (
-            <EmptyState
-              icon="🔍"
-              title="검색 결과가 없습니다"
-              description="다른 검색어나 필터를 사용해 보세요."
-              actionLabel="필터 초기화"
-              onAction={clearFilters}
-            />
+            <div className="empty-state">
+              <div className="empty-state-icon">🔍</div>
+              <h3>검색 결과가 없습니다</h3>
+              <p>다른 검색어나 필터를 사용해 보세요.</p>
+              <button type="button" className="btn btn-secondary" onClick={clearFilters}>
+                필터 초기화
+              </button>
+            </div>
           )}
         </div>
       </div>

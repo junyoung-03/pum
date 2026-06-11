@@ -11,7 +11,7 @@ import {
 } from '../data/perfumeData';
 import { toggleFavorite, resetAnswers } from '../data/store';
 import type { RootState } from '../data/store';
-import { Badge, Button, EmptyState, PerfumeImage, NoteList } from '../components/shared';
+import { Badge, Button, PerfumeImage } from '../components/shared';
 
 function generateReason(answers: RecommendAnswers, perfume: Perfume) {
   const parts: string[] = [];
@@ -98,13 +98,14 @@ export default function ResultPage() {
     return (
       <div className="result-page">
         <div className="container">
-          <EmptyState
-            icon="?"
-            title="추천 결과가 없습니다"
-            description="먼저 향수 추천 설문을 완료해주세요."
-            actionLabel="추천받으러 가기"
-            onAction={() => navigate('/recommend')}
-          />
+          <div className="empty-state">
+            <div className="empty-state-icon">?</div>
+            <h3>추천 결과가 없습니다</h3>
+            <p>먼저 향수 추천 설문을 완료해주세요.</p>
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/recommend')}>
+              추천받으러 가기
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -114,13 +115,14 @@ export default function ResultPage() {
     return (
       <div className="result-page">
         <div className="container">
-          <EmptyState
-            icon="!"
-            title="추천 결과를 찾을 수 없습니다"
-            description="다시 추천을 받아보시겠어요?"
-            actionLabel="다시 추천받기"
-            onAction={handleRetry}
-          />
+          <div className="empty-state">
+            <div className="empty-state-icon">!</div>
+            <h3>추천 결과를 찾을 수 없습니다</h3>
+            <p>다시 추천을 받아보시겠어요?</p>
+            <button type="button" className="btn btn-secondary" onClick={handleRetry}>
+              다시 추천받기
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -177,11 +179,20 @@ export default function ResultPage() {
                 </div>
               </div>
 
-              <NoteList
-                topNote={perfume.topNote}
-                middleNote={perfume.middleNote}
-                baseNote={perfume.baseNote}
-              />
+              <div className="note-list">
+                <div className="note-item">
+                  <h4>Top Note</h4>
+                  <p>{perfume.topNote.join(', ')}</p>
+                </div>
+                <div className="note-item">
+                  <h4>Middle Note</h4>
+                  <p>{perfume.middleNote.join(', ')}</p>
+                </div>
+                <div className="note-item">
+                  <h4>Base Note</h4>
+                  <p>{perfume.baseNote.join(', ')}</p>
+                </div>
+              </div>
 
               <div className="result-actions">
                 <Button

@@ -1,4 +1,5 @@
-import { NavLink, Routes, Route } from 'react-router-dom';
+import { useEffect } from 'react';
+import { NavLink, Routes, Route, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../data/store';
 import HomePage from '../pages/HomePage';
@@ -8,14 +9,17 @@ import CartPage from '../pages/CartPage';
 import RecommendPage from '../pages/RecommendPage';
 import ResultPage from '../pages/ResultPage';
 import ReviewPage from '../pages/ReviewPage';
-import ScrollToTop from './ScrollToTop';
 
 export default function Content() {
+  const { pathname } = useLocation();
   const favoriteCount = useSelector((state: RootState) => state.favorite.ids.length);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
 
   return (
     <>
-      <ScrollToTop />
       <header className="header">
         <div className="container header-inner">
           <NavLink to="/" className="logo">

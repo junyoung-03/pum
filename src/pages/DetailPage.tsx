@@ -4,14 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { perfumeData, Perfume } from '../data/perfumeData';
 import { toggleFavorite } from '../data/store';
 import type { RootState } from '../data/store';
-import {
-  Badge,
-  Button,
-  SectionTitle,
-  EmptyState,
-  PerfumeImage,
-  NoteList
-} from '../components/shared';
+import { Badge, Button, PerfumeImage } from '../components/shared';
 
 function getSimilarPerfumes(currentPerfume: Perfume, limit = 3) {
   return perfumeData
@@ -52,13 +45,14 @@ export default function DetailPage() {
     return (
       <div className="detail-page">
         <div className="container">
-          <EmptyState
-            icon="?"
-            title="향수를 찾을 수 없습니다"
-            description="요청하신 향수 정보가 존재하지 않습니다."
-            actionLabel="컬렉션으로 돌아가기"
-            onAction={() => navigate('/list')}
-          />
+          <div className="empty-state">
+            <div className="empty-state-icon">?</div>
+            <h3>향수를 찾을 수 없습니다</h3>
+            <p>요청하신 향수 정보가 존재하지 않습니다.</p>
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/list')}>
+              컬렉션으로 돌아가기
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -93,11 +87,20 @@ export default function DetailPage() {
               <p className="detail-highlight">{perfume.highlight}</p>
               <p className="detail-description">{perfume.description}</p>
 
-              <NoteList
-                topNote={perfume.topNote}
-                middleNote={perfume.middleNote}
-                baseNote={perfume.baseNote}
-              />
+              <div className="note-list">
+                <div className="note-item">
+                  <h4>Top Note</h4>
+                  <p>{perfume.topNote.join(', ')}</p>
+                </div>
+                <div className="note-item">
+                  <h4>Middle Note</h4>
+                  <p>{perfume.middleNote.join(', ')}</p>
+                </div>
+                <div className="note-item">
+                  <h4>Base Note</h4>
+                  <p>{perfume.baseNote.join(', ')}</p>
+                </div>
+              </div>
 
               <div className="detail-meta">
                 <div className="meta-item">
@@ -135,11 +138,10 @@ export default function DetailPage() {
 
         {similarPerfumes.length > 0 && (
           <section className="similar-section">
-            <SectionTitle
-              title="비슷한 향수"
-              subtitle="이 향수와 비슷한 느낌의 향수들"
-              align="left"
-            />
+            <div className="section-title section-title-left">
+              <h2>비슷한 향수</h2>
+              <p>이 향수와 비슷한 느낌의 향수들</p>
+            </div>
             <div className="similar-grid">
               {similarPerfumes.map((similar) => (
                 <Link

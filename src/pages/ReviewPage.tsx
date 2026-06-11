@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { perfumeData } from '../data/perfumeData';
 import { addReview } from '../data/store';
 import type { RootState } from '../data/store';
-import { Button, SectionTitle, EmptyState } from '../components/shared';
+import { Button } from '../components/shared';
 
 export default function ReviewPage() {
   const dispatch = useDispatch();
@@ -68,7 +68,10 @@ export default function ReviewPage() {
   return (
     <div className="review-page">
       <div className="container">
-        <SectionTitle title="Reviews" subtitle="향수를 사용해본 분들의 생생한 후기" />
+        <div className="section-title section-title-center">
+          <h2>Reviews</h2>
+          <p>향수를 사용해본 분들의 생생한 후기</p>
+        </div>
 
         <div className="review-layout">
           <div className="review-form-section">
@@ -189,11 +192,11 @@ export default function ReviewPage() {
                 ))}
               </div>
             ) : (
-              <EmptyState
-                icon="✍"
-                title="아직 리뷰가 없습니다"
-                description="첫 번째 리뷰를 작성해보세요!"
-              />
+              <div className="empty-state">
+                <div className="empty-state-icon">✍</div>
+                <h3>아직 리뷰가 없습니다</h3>
+                <p>첫 번째 리뷰를 작성해보세요!</p>
+              </div>
             )}
           </div>
         </div>

@@ -29,50 +29,6 @@ export function Badge({
   return <span className={`badge badge-${variant}`}>{children}</span>;
 }
 
-export function SectionTitle({
-  title,
-  subtitle,
-  align = 'center'
-}: {
-  title: string;
-  subtitle?: string;
-  align?: 'left' | 'center';
-}) {
-  return (
-    <div className={`section-title section-title-${align}`}>
-      <h2>{title}</h2>
-      {subtitle && <p>{subtitle}</p>}
-    </div>
-  );
-}
-
-export function EmptyState({
-  icon,
-  title,
-  description,
-  actionLabel,
-  onAction
-}: {
-  icon?: ReactNode;
-  title: string;
-  description: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <div className="empty-state">
-      {icon && <div className="empty-state-icon">{icon}</div>}
-      <h3>{title}</h3>
-      <p>{description}</p>
-      {actionLabel && onAction && (
-        <Button variant="secondary" onClick={onAction}>
-          {actionLabel}
-        </Button>
-      )}
-    </div>
-  );
-}
-
 function hasImageSrc(image: string) {
   return image.startsWith('/') || image.startsWith('images/');
 }
@@ -124,33 +80,6 @@ export function PerfumeImage({
             opacity="0.15"
           />
         </svg>
-      </div>
-    </div>
-  );
-}
-
-export function NoteList({
-  topNote,
-  middleNote,
-  baseNote
-}: {
-  topNote: string[];
-  middleNote: string[];
-  baseNote: string[];
-}) {
-  return (
-    <div className="note-list">
-      <div className="note-item">
-        <h4>Top Note</h4>
-        <p>{topNote.join(', ')}</p>
-      </div>
-      <div className="note-item">
-        <h4>Middle Note</h4>
-        <p>{middleNote.join(', ')}</p>
-      </div>
-      <div className="note-item">
-        <h4>Base Note</h4>
-        <p>{baseNote.join(', ')}</p>
       </div>
     </div>
   );

@@ -1,15 +1,18 @@
 import { Link } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
 import { Perfume } from '../data/perfumeData';
-import { toggleFavorite } from '../data/store';
-import type { RootState } from '../data/store';
 import { Badge, Button, PerfumeImage } from './shared';
 
-export default function PerfumeItem({ perfume }: { perfume: Perfume }) {
-  const dispatch = useDispatch();
-  const favoriteIds = useSelector((state: RootState) => state.favorite.ids);
-  const isFavorite = favoriteIds.includes(perfume.id);
+interface PerfumeItemProps {
+  perfume: Perfume;
+  isFavorite: boolean;
+  onToggleFavorite: (id: string) => void;
+}
 
+export default function PerfumeItem({
+  perfume,
+  isFavorite,
+  onToggleFavorite
+}: PerfumeItemProps) {
   return (
     <article className="perfume-card">
       <Link
@@ -35,7 +38,7 @@ export default function PerfumeItem({ perfume }: { perfume: Perfume }) {
           <Button
             variant="ghost"
             size="small"
-            onClick={() => dispatch(toggleFavorite(perfume.id))}
+            onClick={() => onToggleFavorite(perfume.id)}
             className={isFavorite ? 'favorite-active' : ''}
           >
             {isFavorite ? '♥ 찜 해제' : '♡ 찜하기'}

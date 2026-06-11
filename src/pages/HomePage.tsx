@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { featuredPerfumes } from '../data/perfumeData';
 import { toggleFavorite } from '../data/store';
 import type { RootState } from '../data/store';
-import { Button, SectionTitle, PerfumeImage } from '../components/shared';
+import { Button, PerfumeImage } from '../components/shared';
 
 export default function HomePage() {
   const dispatch = useDispatch();
@@ -46,10 +46,10 @@ export default function HomePage() {
 
       <section className="features-section">
         <div className="container">
-          <SectionTitle
-            title="Why SCENTIQUE"
-            subtitle="특별한 향수 경험을 위한 세 가지 약속"
-          />
+          <div className="section-title section-title-center">
+            <h2>Why SCENTIQUE</h2>
+            <p>특별한 향수 경험을 위한 세 가지 약속</p>
+          </div>
           <div className="features-grid">
             {features.map((feature, index) => (
               <div key={index} className="feature-card">
@@ -64,10 +64,10 @@ export default function HomePage() {
 
       <section className="best-section">
         <div className="container">
-          <SectionTitle
-            title="Best Collection"
-            subtitle="가장 사랑받는 시그니처 향수"
-          />
+          <div className="section-title section-title-center">
+            <h2>Best Collection</h2>
+            <p>가장 사랑받는 시그니처 향수</p>
+          </div>
           <div className="best-grid">
             {featuredPerfumes.map((perfume) => (
               <article key={perfume.id} className="best-card">
