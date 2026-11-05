@@ -1,39 +1,55 @@
-import { useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { perfumeData, Category, Mood } from '../data/perfumeData';
-import { toggleFavorite } from '../data/store';
-import type { RootState } from '../data/store';
+import { useEffect, useState } from 'react';
+import { api, errorMessage, toQuery } from '../api/client';
+import { CATEGORIES, MOODS, SEASONS, Category, Mood, Perfume, Season } from '../data/perfumeData';
+import useFavorite from '../data/useFavorite';
 import PerfumeItem from '../components/PerfumeItem';
 
-const categories: (Category | 'All')[] = ['All', 'Floral', 'Woody', 'Musk', 'Citrus', 'Amber'];
-const moods: (Mood | '전체')[] = ['전체', '고급스러운', '상큼한', '차분한', '로맨틱한', '세련된', '우아한'];
+const categories: (Category | 'All')[] = ['All', ...CATEGORIES];
+const moods: (Mood | '전체')[] = ['전체', ...MOODS];
+const seasons: (Season | '전체')[] = ['전체', ...SEASONS];
 
+// 컬렉션: GET /api/perfumes?q=&category=&mood=&season= (검색·필터는 서버에서 처리)
 export default function ListPage() {
-  const dispatch = useDispatch();
-  const favoriteIds = useSelector((state: RootState) => state.favorite.ids);
+  const { favoriteIds, toggleFavorite } = useFavorite();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category | 'All'>('All');
   const [selectedMood, setSelectedMood] = useState<Mood | '전체'>('전체');
+  const [selectedSeason, setSelectedSeason] = useState<Season | '전체'>('전체');
 
-  const filteredPerfumes = perfumeData.filter((perfume) => {
-    const matchesSearch =
-      perfume.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      perfume.brand.toLowerCase().includes(searchQuery.toLowerCase());
+  const [perfumes, setPerfumes] = useState<Perfume[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-    const matchesCategory =
-      selectedCategory === 'All' || perfume.category === selectedCategory;
-
-    const matchesMood =
-      selectedMood === '전체' || perfume.mood.includes(selectedMood);
-
-    return matchesSearch && matchesCategory && matchesMood;
-  });
+  useEffect(() => {
+    // 검색어 입력 중에는 0.3초 기다렸다가 요청
+    const timer = setTimeout(() => {
+      setLoading(true);
+      const query = toQuery({
+        q: searchQuery.trim(),
+        category: selectedCategory === 'All' ? '' : selectedCategory,
+        mood: selectedMood === '전체' ? '' : selectedMood,
+        season: selectedSeason === '전체' ? '' : selectedSeason,
+        limit: 50
+      });
+      api<Perfume[]>(`/perfumes${query}`)
+        .then(({ data, pagination }) => {
+          setPerfumes(data);
+          setTotal(pagination?.total ?? data.length);
+          setError('');
+        })
+        .catch((err) => setError(errorMessage(err)))
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, selectedCategory, selectedMood, selectedSeason]);
 
   const clearFilters = () => {
     setSearchQuery('');
     setSelectedCategory('All');
     setSelectedMood('전체');
+    setSelectedSeason('전체');
   };
 
   return (
@@ -84,33 +100,53 @@ export default function ListPage() {
               ))}
             </div>
           </div>
+
+          <div className="filter-group">
+            <label>계절</label>
+            <div className="filter-buttons">
+              {seasons.map((season) => (
+                <button
+                  key={season}
+                  className={`filter-btn ${selectedSeason === season ? 'active' : ''}`}
+                  onClick={() => setSelectedSeason(season)}
+                >
+                  {season}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="collection-results">
+          {error && <p className="notice notice-error">{error}</p>}
+
           <p className="results-count">
-            총 <strong>{filteredPerfumes.length}</strong>개의 향수
+            총 <strong>{total}</strong>개의 향수 {loading && <span className="loading-text">불러오는 중...</span>}
           </p>
 
-          {filteredPerfumes.length > 0 ? (
+          {perfumes.length > 0 ? (
             <div className="perfume-grid">
-              {filteredPerfumes.map((perfume) => (
+              {perfumes.map((perfume) => (
                 <PerfumeItem
                   key={perfume.id}
                   perfume={perfume}
                   isFavorite={favoriteIds.includes(perfume.id)}
-                  onToggleFavorite={(id) => dispatch(toggleFavorite(id))}
+                  onToggleFavorite={toggleFavorite}
                 />
               ))}
             </div>
           ) : (
-            <div className="empty-state">
-              <div className="empty-state-icon">🔍</div>
-              <h3>검색 결과가 없습니다</h3>
-              <p>다른 검색어나 필터를 사용해 보세요.</p>
-              <button type="button" className="btn btn-secondary" onClick={clearFilters}>
-                필터 초기화
-              </button>
-            </div>
+            !loading &&
+            !error && (
+              <div className="empty-state">
+                <div className="empty-state-icon">🔍</div>
+                <h3>검색 결과가 없습니다</h3>
+                <p>다른 검색어나 필터를 사용해 보세요.</p>
+                <button type="button" className="btn btn-secondary" onClick={clearFilters}>
+                  필터 초기화
+                </button>
+              </div>
+            )
           )}
         </div>
       </div>

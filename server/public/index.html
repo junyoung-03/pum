@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCENTIQUE API 테스트</title>
+<style>
+  :root {
+    --bg: #f6f4f0; --panel: #ffffff; --ink: #1f1d1a; --muted: #6b665e; --line: #e2ddd4;
+    --accent: #7a5c3e; --accent-soft: #f1e8dd;
+    --get: #2f6b3a; --post: #2f5d8a; --put: #8a6a12; --patch: #6a4a8a; --delete: #9a3a3a;
+    --ok: #2f6b3a; --ok-soft: #e4f1e6; --warn: #9a6512; --warn-soft: #fbf0d9; --err: #9a3a3a; --err-soft: #f7e3e3;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: 'Pretendard', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; font-size: 14px; }
+  code, pre, .mono { font-family: Consolas, 'D2Coding', 'SF Mono', monospace; }
+
+  header { background: var(--ink); color: #fff; padding: 14px 20px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
+  header .sub { color: #bdb6aa; font-size: 12.5px; }
+  .auth { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .auth .who { font-size: 13px; color: #e9e3d8; }
+  .auth .who b { color: #fff; }
+  .auth button { background: #3a3631; color: #fff; border: 1px solid #575048; border-radius: 6px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; }
+  .auth button:hover { background: #4a453f; }
+  .auth button.out { background: transparent; }
+
+  .layout { display: grid; grid-template-columns: 330px 1fr; gap: 16px; padding: 16px 20px 40px; max-width: 1400px; margin: 0 auto; }
+  nav { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 0; align-self: start; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+  nav h2 { font-size: 12px; color: var(--muted); margin: 12px 14px 4px; letter-spacing: .04em; }
+  nav button { display: flex; width: 100%; align-items: center; gap: 8px; text-align: left; border: 0; background: none; padding: 7px 14px; cursor: pointer; font-size: 13px; color: var(--ink); }
+  nav button:hover { background: #f4f1ec; }
+  nav button.active { background: var(--accent-soft); }
+  nav .path { font-size: 12px; color: var(--muted); }
+  nav .label { flex: 1; min-width: 0; }
+  nav .label div:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .m { display: inline-block; min-width: 54px; text-align: center; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 2px 0; color: #fff; }
+  .m-GET { background: var(--get); } .m-POST { background: var(--post); } .m-PUT { background: var(--put); }
+  .m-PATCH { background: var(--patch); } .m-DELETE { background: var(--delete); }
+  .star { color: #b8860b; font-size: 12px; }
+  .lock { font-size: 11px; color: var(--muted); }
+
+  main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  .card h3 { margin: 0 0 4px; font-size: 16px; }
+  .desc { color: var(--muted); margin: 0 0 12px; line-height: 1.55; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .url { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; font-size: 13.5px; background: #fbfaf8; }
+  .send { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 9px 20px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .send:hover { filter: brightness(1.08); }
+  .send:disabled { opacity: .6; cursor: default; }
+  label.small { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; }
+  textarea { width: 100%; min-height: 150px; border: 1px solid var(--line); border-radius: 6px; padding: 10px; font-size: 13px; resize: vertical; background: #fbfaf8; }
+  .hint { font-size: 12.5px; padding: 8px 10px; border-radius: 6px; margin-top: 10px; line-height: 1.5; }
+  .hint.info { background: #eef3f8; color: #2c4b6b; }
+  .hint.warn { background: var(--warn-soft); color: var(--warn); }
+  .preview { margin-top: 12px; font-size: 12.5px; color: var(--muted); background: #f8f6f2; border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; word-break: break-all; }
+
+  .res-head { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .status { font-weight: 700; padding: 3px 10px; border-radius: 999px; font-size: 13px; }
+  .s2 { background: var(--ok-soft); color: var(--ok); } .s4 { background: var(--warn-soft); color: var(--warn); } .s5 { background: var(--err-soft); color: var(--err); }
+  .ms { color: var(--muted); font-size: 12.5px; }
+  pre.out { margin: 0; background: #1f1d1a; color: #efe9de; border-radius: 8px; padding: 14px; font-size: 12.8px; line-height: 1.55; overflow: auto; max-height: 520px; white-space: pre-wrap; word-break: break-word; }
+  .empty { color: var(--muted); }
+  .vars { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .vars code { background: #f1ede6; padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; padding: 12px 16px 32px; }
+    nav { position: static; max-height: none; }
+    .auth { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>SCENTIQUE API 테스트</h1>
+    <div class="sub">API를 고르고 <b>보내기</b>를 누르면 결과가 아래에 나옵니다. 로그인하면 토큰이 자동으로 붙어요.</div>
+  </div>
+  <div class="auth">
+    <span class="who" id="who">로그인 안 됨</span>
+    <button data-login="admin">관리자로 로그인</button>
+    <button data-login="lover">향수러버로 로그인</button>
+    <button data-login="daily">데일리향수로 로그인</button>
+    <button class="out" id="forget">토큰 지우기</button>
+  </div>
+</header>
+
+<div class="layout">
+  <nav id="nav"></nav>
+  <main>
+    <section class="card">
+      <h3 id="title"></h3>
+      <p class="desc" id="desc"></p>
+      <div class="row">
+        <span class="m" id="method"></span>
+        <input class="url mono" id="url" spellcheck="false">
+        <button class="send" id="send">보내기</button>
+      </div>
+      <div id="bodyWrap">
+        <label class="small" for="body">요청 본문 (JSON) — 값을 바꿔서 보내도 됩니다</label>
+        <textarea class="mono" id="body" spellcheck="false"></textarea>
+      </div>
+      <div id="hints"></div>
+      <div class="preview mono" id="preview"></div>
+      <div class="vars" id="vars"></div>
+    </section>
+
+    <section class="card">
+      <div class="res-head">
+        <h3 style="margin:0">응답</h3>
+        <span class="status" id="status" hidden></span>
+        <span class="ms" id="ms"></span>
+      </div>
+      <pre class="out" id="out"><span class="empty">아직 보낸 요청이 없습니다.</span></pre>
+    </section>
+  </main>
+</div>
+
+<script>
+// ===== 테스트 계정 (db/seed.sql) =====
+const ACCOUNTS = {
+  admin: { email: 'admin@scentique.com', password: 'admin1234' },
+  lover: { email: 'lover@scentique.com', password: 'user1234' },
+  daily: { email: 'daily@scentique.com', password: 'user1234' },
+};
+
+// ===== URL 안의 {변수} 기본값 — 등록(POST)에 성공하면 새 id로 자동 교체 =====
+const vars = { reviewId: 1, postId: 1, historyId: 1 };
+
+// ===== API 목록 (core: 핵심 API, auth: 'user' 로그인 / 'admin' 관리자 / 'optional' 선택) =====
+const GROUPS = [
+  { name: '회원 (라우터 개수 제외)', items: [
+    { m: 'POST', path: '/api/users/signup', name: '회원가입', body: { email: 'newbie@scentique.com', password: 'pass1234', nickname: '새회원' } },
+    { m: 'POST', path: '/api/users/login', name: '로그인 (토큰 자동 저장)', body: ACCOUNTS.lover, desc: '성공하면 응답의 token이 자동 저장되어 이후 요청에 붙습니다.' },
+    { m: 'POST', path: '/api/users/logout', name: '로그아웃', auth: 'user' },
+    { m: 'GET', path: '/api/users/me', name: '내 정보 조회', auth: 'user' },
+    { m: 'PUT', path: '/api/users/me', name: '닉네임·비밀번호 수정', auth: 'user', body: { nickname: '바뀐닉네임' } },
+    { m: 'DELETE', path: '/api/users/me', name: '회원 탈퇴', auth: 'user', warn: '지금 로그인한 계정이 삭제됩니다. npm run db:init을 실행하면 초기 계정이 다시 생깁니다.' },
+  ]},
+  { name: '1. 향수 /api/perfumes', items: [
+    { m: 'GET', path: '/api/perfumes?category=Woody', name: '목록 (검색·필터)', core: true, desc: 'q, category, mood, season, page, limit을 주소에 붙여 필터링합니다. 예: ?mood=로맨틱한&season=봄' },
+    { m: 'GET', path: '/api/perfumes/featured', name: '대표 향수 3종' },
+    { m: 'GET', path: '/api/perfumes/le-labo-santal-33', name: '상세', core: true },
+    { m: 'GET', path: '/api/perfumes/le-labo-santal-33/similar', name: '비슷한 향수', desc: '같은 계열 +3, 무드 겹침 1개당 +1, 계절 겹침 1개당 +0.5 점수 순입니다.' },
+    { m: 'POST', path: '/api/perfumes', name: '향수 등록', auth: 'admin', body: { id: 'my-perfume', name: 'My Eau', brand: 'MY BRAND', category: 'Citrus', mood: ['상큼한'], season: ['여름'], purpose: ['데일리'], shortCopy: '테스트로 등록한 향수' } },
+    { m: 'PUT', path: '/api/perfumes/my-perfume', name: '향수 수정', auth: 'admin', body: { shortCopy: '수정한 소개 문구', featured: true, featuredOrder: 4 } },
+    { m: 'DELETE', path: '/api/perfumes/my-perfume', name: '향수 삭제', auth: 'admin' },
+  ]},
+  { name: '2. 리뷰 /api/reviews', items: [
+    { m: 'GET', path: '/api/reviews?sort=latest', name: '목록', desc: 'perfumeId, sort(latest/rating), page, limit을 붙여 쓸 수 있습니다.' },
+    { m: 'GET', path: '/api/reviews/stats/mfk-baccarat-rouge-540', name: '향수별 별점 통계' },
+    { m: 'GET', path: '/api/reviews/{reviewId}', name: '상세' },
+    { m: 'POST', path: '/api/reviews', name: '리뷰 작성', core: true, auth: 'user', body: { perfumeId: 'tom-ford-oud-wood', rating: 5, content: '깊고 따뜻한 우디 향이에요.' }, desc: '작성에 성공하면 새 리뷰 id가 {reviewId}에 저장되어 상세·수정·삭제에 바로 쓰입니다.' },
+    { m: 'PUT', path: '/api/reviews/{reviewId}', name: '리뷰 수정 (본인만)', auth: 'user', body: { rating: 4, content: '수정한 후기입니다.' } },
+    { m: 'DELETE', path: '/api/reviews/{reviewId}', name: '리뷰 삭제 (본인만)', auth: 'user' },
+  ]},
+  { name: '3. 찜 /api/favorites', items: [
+    { m: 'GET', path: '/api/favorites/ranking', name: '찜 많은 향수 순위' },
+    { m: 'GET', path: '/api/favorites', name: '내 찜 목록', auth: 'user' },
+    { m: 'GET', path: '/api/favorites/dior-sauvage-edp/check', name: '찜 여부 확인', auth: 'user' },
+    { m: 'POST', path: '/api/favorites/dior-sauvage-edp', name: '찜 추가', core: true, auth: 'user', desc: '같은 향수를 한 번 더 보내면 409(이미 찜함)가 나옵니다.' },
+    { m: 'DELETE', path: '/api/favorites/dior-sauvage-edp', name: '찜 해제', core: true, auth: 'user' },
+    { m: 'DELETE', path: '/api/favorites', name: '찜 전체 비우기', auth: 'user' },
+  ]},
+  { name: '4. 추천 /api/recommend', items: [
+    { m: 'GET', path: '/api/recommend/questions', name: '설문 질문' },
+    { m: 'GET', path: '/api/recommend/stats', name: '추천 통계' },
+    { m: 'POST', path: '/api/recommend', name: '추천 요청', core: true, auth: 'optional', body: { mood: '고급스러운', season: '겨울', category: 'Amber', purpose: '특별한 날' }, desc: '로그인 없이도 됩니다. 로그인 상태면 기록이 저장되고 기록 id가 {historyId}에 들어갑니다.' },
+    { m: 'GET', path: '/api/recommend/history', name: '내 추천 기록', auth: 'user' },
+    { m: 'GET', path: '/api/recommend/history/{historyId}', name: '기록 상세', auth: 'user' },
+    { m: 'DELETE', path: '/api/recommend/history/{historyId}', name: '기록 삭제', auth: 'user' },
+  ]},
+  { name: '5. 중고 판매글 /api/market', items: [
+    { m: 'GET', path: '/api/market?status=판매중&sort=priceDesc', name: '판매글 목록', desc: 'brand, category, minPrice, maxPrice, status, sort(latest/priceAsc/priceDesc)를 붙여 쓸 수 있습니다.' },
+    { m: 'GET', path: '/api/market/my', name: '내 판매글', auth: 'user' },
+    { m: 'GET', path: '/api/market/{postId}', name: '판매글 상세' },
+    { m: 'POST', path: '/api/market', name: '판매글 등록', core: true, auth: 'user', body: { title: '톰포드 오드우드 50ml 잔량 70%', perfumeId: 'tom-ford-oud-wood', volumeMl: 50, remainPercent: 70, price: 180000, content: '정품, 박스 없음' }, desc: '등록에 성공하면 새 판매글 id가 {postId}에 저장됩니다.' },
+    { m: 'PUT', path: '/api/market/{postId}', name: '판매글 수정 (본인만)', auth: 'user', body: { price: 170000 } },
+    { m: 'PATCH', path: '/api/market/{postId}/status', name: '거래 상태 변경 (본인만)', auth: 'user', body: { status: '예약중' }, desc: 'status는 판매중, 예약중, 판매완료 중 하나입니다.' },
+    { m: 'DELETE', path: '/api/market/{postId}', name: '판매글 삭제 (본인만)', auth: 'user' },
+  ]},
+];
+
+// ===== 상태 =====
+let token = null;
+let user = null;
+let current = null;
+try {
+  token = sessionStorage.getItem('scentique-token');
+  user = JSON.parse(sessionStorage.getItem('scentique-user') || 'null');
+} catch { /* 저장소를 못 쓰는 환경이면 메모리에만 보관 */ }
+
+const $ = (id) => document.getElementById(id);
+const fillVars = (path) => path.replace(/\{(\w+)\}/g, (_, k) => vars[k]);
+
+function saveAuth(newToken, newUser) {
+  token = newToken; user = newUser;
+  try {
+    if (token) { sessionStorage.setItem('scentique-token', token); sessionStorage.setItem('scentique-user', JSON.stringify(user)); }
+    else { sessionStorage.removeItem('scentique-token'); sessionStorage.removeItem('scentique-user'); }
+  } catch { /* 무시 */ }
+  renderWho();
+  renderPreview();
+}
+
+function renderWho() {
+  const who = $('who');
+  who.textContent = '';
+  if (!user) { who.textContent = '로그인 안 됨'; return; }
+  const b = document.createElement('b');
+  b.textContent = user.nickname;
+  who.append('로그인: ', b, ` (${user.role === 'admin' ? '관리자' : '회원'})`);
+}
+
+// ===== 왼쪽 목록 =====
+function renderNav() {
+  const nav = $('nav');
+  nav.innerHTML = '';
+  GROUPS.forEach((g) => {
+    const h = document.createElement('h2');
+    h.textContent = g.name;
+    nav.appendChild(h);
+    g.items.forEach((api) => {
+      const b = document.createElement('button');
+      const authTag = api.auth === 'admin' ? '관리자' : api.auth === 'user' ? '로그인' : api.auth === 'optional' ? '로그인 선택' : '';
+      b.innerHTML = `<span class="m m-${api.m}">${api.m}</span>
+        <span class="label"><div>${api.name} ${api.core ? '<span class="star">★핵심</span>' : ''}</div>
+        <div class="path mono">${api.path.split('?')[0]} ${authTag ? `<span class="lock">· ${authTag}</span>` : ''}</div></span>`;
+      b.onclick = () => select(api, b);
+      nav.appendChild(b);
+      api._btn = b;
+    });
+  });
+}
+
+// ===== API 선택 =====
+function select(api, btn) {
+  current = api;
+  document.querySelectorAll('nav button.active').forEach((x) => x.classList.remove('active'));
+  (btn || api._btn).classList.add('active');
+  $('title').textContent = api.name + (api.core ? '  ★ 핵심 API' : '');
+  $('desc').textContent = api.desc || '';
+  $('method').textContent = api.m;
+  $('method').className = `m m-${api.m}`;
+  $('url').value = fillVars(api.path);
+  const hasBody = ['POST', 'PUT', 'PATCH'].includes(api.m) && api.body;
+  $('bodyWrap').hidden = !hasBody;
+  $('body').value = hasBody ? JSON.stringify(api.body, null, 2) : '';
+  renderHints();
+  renderPreview();
+}
+
+function renderHints() {
+  const api = current;
+  const hints = [];
+  if (api.auth === 'admin' && (!user || user.role !== 'admin')) hints.push(['warn', '관리자만 쓸 수 있는 API입니다. 위의 “관리자로 로그인”을 먼저 누르세요. (안 하면 401 또는 403이 나옵니다)']);
+  else if (api.auth === 'user' && !user) hints.push(['warn', '로그인이 필요한 API입니다. 위의 로그인 버튼을 먼저 누르세요. (안 하면 401이 나옵니다)']);
+  if (api.warn) hints.push(['warn', api.warn]);
+  if (/\{(reviewId|postId)\}/.test(api.path)) hints.push(['info', '본인 글만 수정·삭제할 수 있습니다. 기본 id 1번 글은 “향수러버” 계정이 쓴 글이에요.']);
+  $('hints').innerHTML = hints.map(([t, m]) => `<div class="hint ${t}">${m}</div>`).join('');
+}
+
+function renderPreview() {
+  if (!current) return;
+  const lines = [`${current.m} ${$('url').value}`];
+  if (token) lines.push(`Authorization: Bearer ${token.slice(0, 24)}…`);
+  if (!$('bodyWrap').hidden) lines.push('Content-Type: application/json');
+  $('preview').textContent = lines.join('\n');
+  $('vars').innerHTML = `현재 변수: <code>{reviewId} = ${vars.reviewId}</code> <code>{postId} = ${vars.postId}</code> <code>{historyId} = ${vars.historyId}</code>`;
+}
+
+// ===== 요청 보내기 =====
+async function send(api, url, bodyText) {
+  const opts = { method: api.m, headers: {} };
+  if (token) opts.headers.Authorization = `Bearer ${token}`;
+  if (['POST', 'PUT', 'PATCH'].includes(api.m) && bodyText) {
+    try { JSON.parse(bodyText); } catch { return show(null, 0, '요청 본문이 올바른 JSON이 아닙니다. 따옴표와 쉼표를 확인해 주세요.'); }
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = bodyText;
+  }
+  $('send').disabled = true;
+  const start = performance.now();
+  try {
+    const res = await fetch(url, opts);
+    const ms = Math.round(performance.now() - start);
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch { /* JSON이 아닌 응답 */ }
+    afterResponse(api, res.status, json);
+    show(res.status, ms, json ? JSON.stringify(json, null, 2) : text);
+  } catch (e) {
+    show(null, 0, '서버에 연결할 수 없습니다. 터미널에서 npm start로 서버가 켜져 있는지 확인해 주세요.');
+  } finally {
+    $('send').disabled = false;
+  }
+}
+
+// 로그인 토큰 저장, 새로 만든 id를 변수에 저장
+function afterResponse(api, status, json) {
+  const data = json && json.data;
+  if (api.path === '/api/users/login' && status === 200 && data) saveAuth(data.token, data.user);
+  if ((api.path === '/api/users/logout' || (api.path === '/api/users/me' && api.m === 'DELETE')) && status === 200) saveAuth(null, null);
+  if (status === 401 && token && json && /로그아웃|만료|존재하지/.test(json.message || '')) saveAuth(null, null);
+  if (api.m === 'POST' && status === 201 && data) {
+    if (api.path === '/api/reviews') vars.reviewId = data.id;
+    if (api.path === '/api/market') vars.postId = data.id;
+  }
+  if (api.path === '/api/recommend' && status === 200 && data && data.historyId) vars.historyId = data.historyId;
+  renderHints();
+  renderPreview();
+}
+
+function show(status, ms, text) {
+  const s = $('status');
+  if (status) {
+    s.hidden = false;
+    s.textContent = status;
+    s.className = `status s${String(status)[0]}`;
+    $('ms').textContent = `${ms}ms`;
+  } else {
+    s.hidden = true;
+    $('ms').textContent = '';
+  }
+  $('out').textContent = text;
+}
+
+// ===== 이벤트 =====
+$('send').onclick = () => current && send(current, $('url').value, $('body').value);
+$('url').oninput = renderPreview;
+$('url').onkeydown = (e) => { if (e.key === 'Enter') $('send').click(); };
+document.querySelectorAll('[data-login]').forEach((b) => {
+  b.onclick = () => {
+    const loginApi = GROUPS[0].items[1];
+    send(loginApi, loginApi.path, JSON.stringify(ACCOUNTS[b.dataset.login]));
+  };
+});
+$('forget').onclick = () => saveAuth(null, null);
+
+renderNav();
+renderWho();
+select(GROUPS[1].items[0]);
+</script>
+</body>
+</html>

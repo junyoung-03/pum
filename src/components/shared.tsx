@@ -1,5 +1,12 @@
 import { ButtonHTMLAttributes, ReactNode } from 'react';
-import { Perfume } from '../data/perfumeData';
+
+// 이미지에 필요한 정보만 받음 (목록·대표 향수·비슷한 향수 응답 모두 사용 가능)
+interface ImageInfo {
+  image: string;
+  brand: string;
+  name: string;
+  color?: string;
+}
 
 export function Button({
   variant = 'primary',
@@ -43,7 +50,7 @@ export function PerfumeImage({
   className = '',
   size = 'default'
 }: {
-  perfume: Perfume;
+  perfume: ImageInfo;
   className?: string;
   size?: 'default' | 'large' | 'small';
 }) {

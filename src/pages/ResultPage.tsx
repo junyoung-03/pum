@@ -1,100 +1,35 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import {
-  perfumeData,
-  Perfume,
-  RecommendAnswers,
-  Mood,
-  Season,
-  Purpose
-} from '../data/perfumeData';
-import { toggleFavorite, resetAnswers } from '../data/store';
+import { api } from '../api/client';
+import { resetAnswers } from '../data/store';
 import type { RootState } from '../data/store';
+import type { RecommendStats } from '../data/perfumeData';
+import useFavorite from '../data/useFavorite';
 import { Badge, Button, PerfumeImage } from '../components/shared';
 
-function generateReason(answers: RecommendAnswers, perfume: Perfume) {
-  const parts: string[] = [];
-
-  if (answers.mood) parts.push(`"${answers.mood}" 분위기`);
-  if (answers.season) parts.push(`${answers.season} 계절감`);
-  if (answers.category) parts.push(`${answers.category} 계열 선호도`);
-  if (answers.purpose) parts.push(`${answers.purpose} 목적`);
-
-  const criteriaText =
-    parts.length > 0 ? `선택하신 ${parts.join(', ')}를 기준으로 분석했습니다.` : '';
-
-  const brandText = `${perfume.brand}의 ${perfume.name}은(는)`;
-  const moodDesc = perfume.moodTags.slice(0, 2).join(', ');
-  const purposeDesc = perfume.purpose.join(' 또는 ');
-
-  return `${criteriaText} ${brandText} ${moodDesc} 무드를 연출하며, ${purposeDesc} 상황에 특히 잘 어울리는 향수입니다.`;
-}
-
-function calculateRecommendation(answers: RecommendAnswers) {
-  if (!answers.mood && !answers.season && !answers.category && !answers.purpose) {
-    return null;
-  }
-
-  const results = perfumeData.map((perfume) => {
-    let score = 0;
-    const matchedCriteria: string[] = [];
-
-    if (answers.mood && perfume.mood.includes(answers.mood as Mood)) {
-      score += 30;
-      matchedCriteria.push(`${answers.mood} 분위기`);
-    }
-
-    if (answers.season && perfume.season.includes(answers.season as Season)) {
-      score += 25;
-      matchedCriteria.push(`${answers.season} 계절`);
-    }
-
-    if (answers.category && perfume.category === answers.category) {
-      score += 30;
-      matchedCriteria.push(`${answers.category} 계열`);
-    }
-
-    if (answers.purpose && perfume.purpose.includes(answers.purpose as Purpose)) {
-      score += 15;
-      matchedCriteria.push(`${answers.purpose} 용도`);
-    }
-
-    return { perfume, score, matchedCriteria };
-  });
-
-  results.sort((a, b) => b.score - a.score);
-  const best = results[0];
-
-  if (best.score === 0) {
-    return {
-      perfume: perfumeData[0],
-      score: 50,
-      matchedCriteria: ['기본 추천'],
-      reason: generateReason(answers, perfumeData[0])
-    };
-  }
-
-  return {
-    ...best,
-    reason: generateReason(answers, best.perfume)
-  };
-}
-
+// 추천 결과: RecommendPage에서 POST /api/recommend로 받은 결과를 보여줌
+// 아래쪽 통계: GET /api/recommend/stats
 export default function ResultPage() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const answers = useSelector((state: RootState) => state.recommend.answers);
-  const favoriteIds = useSelector((state: RootState) => state.favorite.ids);
+  const result = useSelector((state: RootState) => state.recommend.result);
+  const isLoggedIn = useSelector((state: RootState) => Boolean(state.auth.token));
+  const { favoriteIds, toggleFavorite } = useFavorite();
+  const [stats, setStats] = useState<RecommendStats | null>(null);
 
-  const recommendation = useMemo(() => calculateRecommendation(answers), [answers]);
+  useEffect(() => {
+    api<RecommendStats>('/recommend/stats')
+      .then(({ data }) => setStats(data))
+      .catch(() => undefined);
+  }, []);
 
   const handleRetry = () => {
     dispatch(resetAnswers());
     navigate('/recommend');
   };
 
-  if (!answers.mood && !answers.season && !answers.category && !answers.purpose) {
+  if (!result) {
     return (
       <div className="result-page">
         <div className="container">
@@ -111,24 +46,7 @@ export default function ResultPage() {
     );
   }
 
-  if (!recommendation) {
-    return (
-      <div className="result-page">
-        <div className="container">
-          <div className="empty-state">
-            <div className="empty-state-icon">!</div>
-            <h3>추천 결과를 찾을 수 없습니다</h3>
-            <p>다시 추천을 받아보시겠어요?</p>
-            <button type="button" className="btn btn-secondary" onClick={handleRetry}>
-              다시 추천받기
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const { perfume, score, reason } = recommendation;
+  const { perfume, score, reason, answers, matchedCriteria } = result;
   const isFavorite = favoriteIds.includes(perfume.id);
 
   return (
@@ -179,6 +97,15 @@ export default function ResultPage() {
                 </div>
               </div>
 
+              <div className="result-selection">
+                <h4>일치한 조건</h4>
+                <div className="selection-tags">
+                  {matchedCriteria.map((c) => (
+                    <span key={c}>✓ {c}</span>
+                  ))}
+                </div>
+              </div>
+
               <div className="note-list">
                 <div className="note-item">
                   <h4>Top Note</h4>
@@ -197,18 +124,49 @@ export default function ResultPage() {
               <div className="result-actions">
                 <Button
                   variant="ghost"
-                  onClick={() => dispatch(toggleFavorite(perfume.id))}
+                  onClick={() => toggleFavorite(perfume.id)}
                   className={isFavorite ? 'favorite-active' : ''}
                 >
                   {isFavorite ? '♥ 찜 해제' : '♡ 찜하기'}
                 </Button>
-                <Link to={`/detail/${perfume.id}`} state={{ perfume }}>
+                <Link to={`/detail/${perfume.id}`}>
                   <Button variant="secondary">상세보기</Button>
                 </Link>
               </div>
             </div>
           </div>
+
+          <p className={`notice ${result.savedToHistory ? 'notice-info' : 'notice-muted'} result-notice`}>
+            {result.savedToHistory ? (
+              <>
+                이 추천 결과가 내 추천 기록에 저장되었습니다. <Link to="/recommend/history">추천 기록 보기 →</Link>
+              </>
+            ) : isLoggedIn ? (
+              '추천 결과를 확인했습니다.'
+            ) : (
+              <>
+                로그인하면 추천 결과가 내 추천 기록에 저장돼요. <Link to="/login">로그인 →</Link>
+              </>
+            )}
+          </p>
         </div>
+
+        {stats && stats.topPerfumes.length > 0 && (
+          <div className="result-stats">
+            <h4>다른 회원들이 많이 추천받은 향수</h4>
+            <ol>
+              {stats.topPerfumes.slice(0, 3).map((p) => (
+                <li key={p.id}>
+                  <Link to={`/detail/${p.id}`}>
+                    {p.brand} {p.name}
+                  </Link>
+                  <span>{p.count}회</span>
+                </li>
+              ))}
+            </ol>
+            <p className="muted-text">지금까지 총 {stats.totalCount}번 추천했어요.</p>
+          </div>
+        )}
 
         <div className="result-bottom-actions">
           <Button variant="ghost" onClick={handleRetry}>

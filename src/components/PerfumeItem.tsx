@@ -17,7 +17,7 @@ export default function PerfumeItem({
     <article className="perfume-card">
       <Link
         to={`/detail/${perfume.id}`}
-        state={{ perfume }}
+       
         className="perfume-card-image"
       >
         <PerfumeImage perfume={perfume} className="perfume-image-placeholder" />
@@ -29,7 +29,7 @@ export default function PerfumeItem({
         </div>
         <p className="perfume-brand">{perfume.brand}</p>
         <h3 className="perfume-name">
-          <Link to={`/detail/${perfume.id}`} state={{ perfume }}>
+          <Link to={`/detail/${perfume.id}`}>
             {perfume.name}
           </Link>
         </h3>
@@ -43,7 +43,7 @@ export default function PerfumeItem({
           >
             {isFavorite ? '♥ 찜 해제' : '♡ 찜하기'}
           </Button>
-          <Link to={`/detail/${perfume.id}`} state={{ perfume }}>
+          <Link to={`/detail/${perfume.id}`}>
             <Button variant="secondary" size="small">
               상세보기
             </Button>

@@ -1,20 +1,66 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { perfumeData } from '../data/perfumeData';
-import { toggleFavorite } from '../data/store';
+import { api, errorMessage } from '../api/client';
+import { setFavorites } from '../data/store';
 import type { RootState } from '../data/store';
+import type { Perfume } from '../data/perfumeData';
+import useFavorite from '../data/useFavorite';
 import PerfumeItem from '../components/PerfumeItem';
+import LoginRequired from '../components/LoginRequired';
 import { Button } from '../components/shared';
 
+// 내 찜 목록: GET /api/favorites, 찜 해제: DELETE /api/favorites/:id, 전체 비우기: DELETE /api/favorites
 export default function CartPage() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const favoriteIds = useSelector((state: RootState) => state.favorite.ids);
+  const isLoggedIn = useSelector((state: RootState) => Boolean(state.auth.token));
+  const { favoriteIds, toggleFavorite } = useFavorite();
 
-  const favoritePerfumes = useMemo(() => {
-    return perfumeData.filter((perfume) => favoriteIds.includes(perfume.id));
-  }, [favoriteIds]);
+  const [favoritePerfumes, setFavoritePerfumes] = useState<Perfume[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    api<Perfume[]>('/favorites')
+      .then(({ data }) => {
+        setFavoritePerfumes(data);
+        dispatch(setFavorites(data.map((p) => p.id)));
+      })
+      .catch((err) => setError(errorMessage(err)))
+      .finally(() => setLoading(false));
+  }, [isLoggedIn, dispatch]);
+
+  if (!isLoggedIn) {
+    return (
+      <div className="favorites-page">
+        <div className="container">
+          <div className="section-title section-title-center">
+            <h2>My Favorites</h2>
+            <p>내가 찜한 향수 컬렉션</p>
+          </div>
+          <LoginRequired message="로그인하면 찜한 향수를 볼 수 있어요" />
+        </div>
+      </div>
+    );
+  }
+
+  const handleToggle = async (id: string) => {
+    const done = await toggleFavorite(id);
+    if (done) setFavoritePerfumes((list) => list.filter((p) => p.id !== id));
+  };
+
+  const handleClear = async () => {
+    if (!window.confirm('찜한 향수를 모두 삭제할까요?')) return;
+    try {
+      await api('/favorites', 'DELETE');
+      setFavoritePerfumes([]);
+      dispatch(setFavorites([]));
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
 
   return (
     <div className="favorites-page">
@@ -24,18 +70,27 @@ export default function CartPage() {
           <p>내가 찜한 향수 컬렉션</p>
         </div>
 
-        {favoritePerfumes.length > 0 ? (
+        {error && <p className="notice notice-error">{error}</p>}
+
+        {loading ? (
+          <p className="loading-block">불러오는 중...</p>
+        ) : favoritePerfumes.length > 0 ? (
           <>
-            <p className="favorites-count">
-              총 <strong>{favoritePerfumes.length}</strong>개의 향수를 찜했습니다
-            </p>
+            <div className="favorites-toolbar">
+              <p className="favorites-count">
+                총 <strong>{favoritePerfumes.length}</strong>개의 향수를 찜했습니다
+              </p>
+              <Button variant="ghost" size="small" onClick={handleClear}>
+                전체 비우기
+              </Button>
+            </div>
             <div className="perfume-grid">
               {favoritePerfumes.map((perfume) => (
                 <PerfumeItem
                   key={perfume.id}
                   perfume={perfume}
                   isFavorite={favoriteIds.includes(perfume.id)}
-                  onToggleFavorite={(id) => dispatch(toggleFavorite(id))}
+                  onToggleFavorite={handleToggle}
                 />
               ))}
             </div>

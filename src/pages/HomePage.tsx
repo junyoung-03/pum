@@ -1,13 +1,29 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
-import { featuredPerfumes } from '../data/perfumeData';
-import { toggleFavorite } from '../data/store';
-import type { RootState } from '../data/store';
+import { api, errorMessage } from '../api/client';
+import type { FavoriteRank, FeaturedPerfume } from '../data/perfumeData';
+import useFavorite from '../data/useFavorite';
 import { Button, PerfumeImage } from '../components/shared';
 
 export default function HomePage() {
-  const dispatch = useDispatch();
-  const favoriteIds = useSelector((state: RootState) => state.favorite.ids);
+  const { favoriteIds, toggleFavorite } = useFavorite();
+  const [featuredPerfumes, setFeaturedPerfumes] = useState<FeaturedPerfume[]>([]);
+  const [ranking, setRanking] = useState<FavoriteRank[]>([]);
+  const [error, setError] = useState('');
+
+  // 대표 향수: GET /api/perfumes/featured
+  useEffect(() => {
+    api<FeaturedPerfume[]>('/perfumes/featured')
+      .then(({ data }) => setFeaturedPerfumes(data))
+      .catch((err) => setError(errorMessage(err)));
+  }, []);
+
+  // 인기 찜 순위: GET /api/favorites/ranking (찜을 누르면 다시 불러옴)
+  useEffect(() => {
+    api<FavoriteRank[]>('/favorites/ranking?limit=5')
+      .then(({ data }) => setRanking(data))
+      .catch(() => undefined);
+  }, [favoriteIds]);
 
   const features = [
     {
@@ -68,20 +84,17 @@ export default function HomePage() {
             <h2>Best Collection</h2>
             <p>가장 사랑받는 시그니처 향수</p>
           </div>
+          {error && <p className="notice notice-error">{error}</p>}
           <div className="best-grid">
             {featuredPerfumes.map((perfume) => (
               <article key={perfume.id} className="best-card">
-                <Link
-                  to={`/detail/${perfume.id}`}
-                  state={{ perfume }}
-                  className="best-card-image"
-                >
+                <Link to={`/detail/${perfume.id}`} className="best-card-image">
                   <PerfumeImage perfume={perfume} className="best-image-placeholder" />
                 </Link>
                 <div className="best-card-content">
                   <p className="best-brand">{perfume.brand}</p>
                   <h3 className="best-name">
-                    <Link to={`/detail/${perfume.id}`} state={{ perfume }}>
+                    <Link to={`/detail/${perfume.id}`}>
                       {perfume.name}
                     </Link>
                   </h3>
@@ -89,11 +102,11 @@ export default function HomePage() {
                   <div className="best-card-actions">
                     <button
                       className={`favorite-btn ${favoriteIds.includes(perfume.id) ? 'active' : ''}`}
-                      onClick={() => dispatch(toggleFavorite(perfume.id))}
+                      onClick={() => toggleFavorite(perfume.id)}
                     >
                       {favoriteIds.includes(perfume.id) ? '♥' : '♡'}
                     </button>
-                    <Link to={`/detail/${perfume.id}`} state={{ perfume }}>
+                    <Link to={`/detail/${perfume.id}`}>
                       <Button variant="ghost" size="small">
                         View More
                       </Button>
@@ -110,6 +123,32 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {ranking.length > 0 && (
+        <section className="ranking-section">
+          <div className="container">
+            <div className="section-title section-title-center">
+              <h2>Most Loved</h2>
+              <p>회원들이 가장 많이 찜한 향수 TOP {ranking.length}</p>
+            </div>
+            <ol className="ranking-list">
+              {ranking.map((item) => (
+                <li key={item.id}>
+                  <Link to={`/detail/${item.id}`} className="ranking-item">
+                    <span className="ranking-number">{item.rank}</span>
+                    <PerfumeImage perfume={item} className="ranking-image" size="small" />
+                    <span className="ranking-info">
+                      <span className="ranking-brand">{item.brand}</span>
+                      <span className="ranking-name">{item.name}</span>
+                    </span>
+                    <span className="ranking-count">♥ {item.favoriteCount}</span>
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+      )}
 
       <section className="cta-section">
         <div className="container cta-content">
