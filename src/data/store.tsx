@@ -79,7 +79,7 @@ const rootReducer = combineReducers({
 const persistConfig = {
   key: 'scentique-v2',
   storage,
-  whitelist: ['auth']
+  whitelist: ['auth', 'favorite']
 };
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

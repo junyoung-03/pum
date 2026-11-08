@@ -3,6 +3,7 @@
 -- 다시 실행하면 모든 테이블을 지우고 새로 만듭니다.
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS revoked_tokens;
 DROP TABLE IF EXISTS market_posts;
 DROP TABLE IF EXISTS recommend_history;
 DROP TABLE IF EXISTS recommend_questions;
@@ -11,6 +12,13 @@ DROP TABLE IF EXISTS reviews;
 DROP TABLE IF EXISTS perfumes;
 DROP TABLE IF EXISTS users;
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- 폐기된 JWT 토큰 (로그아웃·탈퇴 토큰의 jti 보관)
+CREATE TABLE revoked_tokens (
+  token_id    VARCHAR(100) PRIMARY KEY,
+  expires_at  DATETIME NOT NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 회원
 CREATE TABLE users (
@@ -59,6 +67,7 @@ CREATE TABLE reviews (
   content     TEXT NOT NULL,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_review (user_id, perfume_id),
   FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE,
   FOREIGN KEY (perfume_id) REFERENCES perfumes(id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

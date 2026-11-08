@@ -76,7 +76,7 @@ router.post(
   '/logout',
   auth,
   asyncHandler(async (req, res) => {
-    revokeToken(req.tokenId);
+    await revokeToken(req.tokenId, req.tokenExp);
     ok(res, { message: '로그아웃되었습니다.' });
   })
 );
@@ -96,7 +96,7 @@ router.put(
   '/me',
   auth,
   asyncHandler(async (req, res) => {
-    const { nickname, password } = req.body;
+    const { nickname, password, currentPassword } = req.body;
     if (nickname === undefined && password === undefined) {
       throw new HttpError(400, '수정할 닉네임 또는 비밀번호를 입력해 주세요.');
     }
@@ -111,6 +111,13 @@ router.put(
       params.push(nick);
     }
     if (password !== undefined) {
+      if (!currentPassword) {
+        throw new HttpError(400, '현재 비밀번호를 입력해 주세요.');
+      }
+      const [uRows] = await pool.query('SELECT password FROM users WHERE id = ?', [req.user.id]);
+      if (uRows.length === 0 || !(await bcrypt.compare(currentPassword, uRows[0].password))) {
+        throw new HttpError(400, '현재 비밀번호가 일치하지 않습니다.');
+      }
       checkPassword(password);
       sets.push('password = ?');
       params.push(await bcrypt.hash(password, 10));
@@ -128,7 +135,7 @@ router.delete(
   auth,
   asyncHandler(async (req, res) => {
     await pool.query('DELETE FROM users WHERE id = ?', [req.user.id]);
-    revokeToken(req.tokenId);
+    await revokeToken(req.tokenId, req.tokenExp);
     ok(res, { message: '회원 탈퇴가 완료되었습니다.' });
   })
 );

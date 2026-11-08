@@ -119,11 +119,26 @@ router.post(
     const content = checkContent(req.body.content);
     await ensurePerfume(perfumeId);
 
-    const [result] = await pool.query(
-      'INSERT INTO reviews (user_id, perfume_id, rating, content) VALUES (?, ?, ?, ?)',
-      [req.user.id, perfumeId, rating, content]
-    );
-    ok(res, toReview(await findReview(result.insertId)), 201);
+    const [existing] = await pool.query('SELECT id FROM reviews WHERE user_id = ? AND perfume_id = ?', [
+      req.user.id,
+      perfumeId,
+    ]);
+    if (existing.length > 0) {
+      throw new HttpError(409, '이미 이 향수에 작성한 리뷰가 있습니다. 기존 리뷰를 수정해 주세요.');
+    }
+
+    try {
+      const [result] = await pool.query(
+        'INSERT INTO reviews (user_id, perfume_id, rating, content) VALUES (?, ?, ?, ?)',
+        [req.user.id, perfumeId, rating, content]
+      );
+      ok(res, toReview(await findReview(result.insertId)), 201);
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        throw new HttpError(409, '이미 이 향수에 작성한 리뷰가 있습니다.');
+      }
+      throw err;
+    }
   })
 );
 

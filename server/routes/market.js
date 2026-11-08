@@ -72,9 +72,13 @@ async function bodyToColumns(body, isCreate) {
   if (body.brand !== undefined) cols.brand = requireText(body.brand, '브랜드(brand)', 50);
   if (isCreate && !cols.brand) throw new HttpError(400, '브랜드(brand)를 입력하거나 perfumeId를 선택해 주세요.');
 
-  if (body.category !== undefined && body.category !== null) {
-    if (!CATEGORIES.includes(body.category)) throw new HttpError(400, `category는 ${CATEGORIES.join(', ')} 중 하나여야 합니다.`);
-    cols.category = body.category;
+  if (body.category !== undefined) {
+    if (body.category === null || body.category === '') {
+      cols.category = null;
+    } else {
+      if (!CATEGORIES.includes(body.category)) throw new HttpError(400, `category는 ${CATEGORIES.join(', ')} 중 하나여야 합니다.`);
+      cols.category = body.category;
+    }
   }
 
   if (isCreate || body.volumeMl !== undefined) cols.volume_ml = toInt(body.volumeMl, '용량(volumeMl)', { min: 1, max: 1000 });
@@ -115,8 +119,10 @@ router.get(
       where.push('m.status = ?');
       params.push(status);
     }
-    const minPrice = req.query.minPrice !== undefined ? toInt(req.query.minPrice, 'minPrice', { min: 0 }) : null;
-    const maxPrice = req.query.maxPrice !== undefined ? toInt(req.query.maxPrice, 'maxPrice', { min: 0 }) : null;
+    const minPrice =
+      req.query.minPrice !== undefined && req.query.minPrice !== '' ? toInt(req.query.minPrice, 'minPrice', { min: 0 }) : null;
+    const maxPrice =
+      req.query.maxPrice !== undefined && req.query.maxPrice !== '' ? toInt(req.query.maxPrice, 'maxPrice', { min: 0 }) : null;
     if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
       throw new HttpError(400, 'minPrice는 maxPrice보다 클 수 없습니다.');
     }

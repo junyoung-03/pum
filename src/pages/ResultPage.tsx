@@ -129,8 +129,8 @@ export default function ResultPage() {
                 >
                   {isFavorite ? '♥ 찜 해제' : '♡ 찜하기'}
                 </Button>
-                <Link to={`/detail/${perfume.id}`}>
-                  <Button variant="secondary">상세보기</Button>
+                <Link to={`/detail/${perfume.id}`} className="btn btn-secondary btn-medium">
+                  상세보기
                 </Link>
               </div>
             </div>
@@ -172,8 +172,8 @@ export default function ResultPage() {
           <Button variant="ghost" onClick={handleRetry}>
             다시 추천받기
           </Button>
-          <Link to="/list">
-            <Button variant="secondary">컬렉션 보러가기</Button>
+          <Link to="/list" className="btn btn-secondary btn-medium">
+            컬렉션 보러가기
           </Link>
         </div>
       </div>

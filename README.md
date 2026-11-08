@@ -1,12 +1,14 @@
 # SCENTIQUE — 향수 큐레이션 · 중고거래 웹서비스
 
-React(프론트) + Express·MySQL(백엔드)로 만든 프로젝트입니다.
+React(프론트) + Express·MySQL(백엔드)로 만든 풀스택 프로젝트입니다.
+
+> ⚠️ **배포 안내**: GitHub Pages는 정적 호스팅 서비스이므로 백엔드 API 서버(Express + MySQL)가 구동되지 않습니다. 모든 풀스택 기능(향수 데이터, 회원가입/로그인, 리뷰, 추천, 찜, 마켓 등)을 정상적으로 확인하시려면 **아래의 로컬 환경 실행(터미널 2개)** 방식을 권장합니다.
 
 ```
-pum-main/
+pum-bang/
 ├─ src/        React 화면 (Vite)
 ├─ public/     향수 이미지
-└─ server/     Express API 서버 + MySQL (라우터·API·테스트) → server/README.md
+└─ server/     Express API 서버 + MySQL (라우터·API·테스트 대시보드) → server/README.md
 ```
 
 ## 실행 방법 (터미널 2개)
@@ -27,11 +29,12 @@ npm install
 
 | 터미널 | 위치 | 명령 |
 |---|---|---|
-| 1번 (API 서버) | `pum-main/server` | `npm start` |
-| 2번 (화면) | `pum-main` | `npm run dev` |
+| 1번 (API 서버) | `pum-bang/server` | `npm start` |
+| 2번 (화면) | `pum-bang` | `npm run dev` |
 
-브라우저에서 **http://localhost:5173/pum/** 접속
-(화면의 `/api` 요청은 vite.config.ts의 proxy 설정으로 4000번 API 서버에 전달됩니다.)
+- 프론트엔드 접속: **http://localhost:5173/**
+  (화면의 `/api` 요청은 vite.config.ts의 proxy 설정으로 4000번 API 서버에 전달됩니다.)
+- API 테스트 대시보드 접속: **http://localhost:4000/**
 
 ## 테스트 계정
 

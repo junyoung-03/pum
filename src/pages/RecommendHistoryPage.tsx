@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import { api, errorMessage, formatDate } from '../api/client';
 import type { RootState } from '../data/store';
 import type { RecommendHistory } from '../data/perfumeData';
-import { Button, PerfumeImage } from '../components/shared';
+import { PerfumeImage } from '../components/shared';
 import LoginRequired from '../components/LoginRequired';
 
 // 내 추천 기록
@@ -79,8 +79,8 @@ export default function RecommendHistoryPage() {
             <div className="empty-state-icon">✧</div>
             <h3>아직 추천 기록이 없습니다</h3>
             <p>4가지 질문에 답하고 나에게 맞는 향수를 추천받아 보세요.</p>
-            <Link to="/recommend">
-              <Button variant="primary">향수 추천받기</Button>
+            <Link to="/recommend" className="btn btn-primary btn-medium">
+              향수 추천받기
             </Link>
           </div>
         ) : (

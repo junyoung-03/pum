@@ -8,8 +8,8 @@ const pool = require('../db/pool');
 const { jwt: jwtConfig } = require('../config');
 const { HttpError, asyncHandler } = require('../utils/http');
 
-// 로그아웃·탈퇴한 토큰의 고유 id(jti) 목록 (서버 메모리에 보관 → 서버를 재시작하면 초기화됨)
-const revokedTokens = new Set();
+// 로그아웃·탈퇴한 토큰의 고유 id(jti) 목록 (DB 영속 저장 + 인메모리 캐시)
+const revokedTokensCache = new Set();
 
 // jwtid: 토큰마다 고유 id를 붙여서, 같은 초에 발급된 토큰도 서로 구분되게 함
 const signToken = (user) =>
@@ -31,28 +31,44 @@ async function verify(token) {
   } catch {
     throw new HttpError(401, '유효하지 않거나 만료된 토큰입니다.');
   }
-  if (revokedTokens.has(payload.jti)) throw new HttpError(401, '로그아웃된 토큰입니다. 다시 로그인해 주세요.');
+
+  if (revokedTokensCache.has(payload.jti)) {
+    throw new HttpError(401, '로그아웃된 토큰입니다. 다시 로그인해 주세요.');
+  }
+
+  try {
+    const [revoked] = await pool.query('SELECT token_id FROM revoked_tokens WHERE token_id = ?', [payload.jti]);
+    if (revoked && revoked.length > 0) {
+      revokedTokensCache.add(payload.jti);
+      throw new HttpError(401, '로그아웃된 토큰입니다. 다시 로그인해 주세요.');
+    }
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    // DB 테이블 미생성 또는 연결 문제 시 메모리 캐시로 fallback
+  }
 
   const [rows] = await pool.query('SELECT id, email, nickname, role FROM users WHERE id = ?', [payload.id]);
   if (rows.length === 0) throw new HttpError(401, '존재하지 않는 회원입니다.');
-  return { user: rows[0], jti: payload.jti };
+  return { user: rows[0], jti: payload.jti, exp: payload.exp };
 }
 
 const auth = asyncHandler(async (req, res, next) => {
   const token = getToken(req);
   if (!token) throw new HttpError(401, '로그인이 필요합니다.');
-  const { user, jti } = await verify(token);
+  const { user, jti, exp } = await verify(token);
   req.user = user;
   req.tokenId = jti;
+  req.tokenExp = exp ? new Date(exp * 1000) : null;
   next();
 });
 
 const optionalAuth = asyncHandler(async (req, res, next) => {
   const token = getToken(req);
   if (token) {
-    const { user, jti } = await verify(token);
+    const { user, jti, exp } = await verify(token);
     req.user = user;
     req.tokenId = jti;
+    req.tokenExp = exp ? new Date(exp * 1000) : null;
   }
   next();
 });
@@ -62,6 +78,18 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
-const revokeToken = (tokenId) => revokedTokens.add(tokenId);
+const revokeToken = async (tokenId, expiresAt) => {
+  revokedTokensCache.add(tokenId);
+  try {
+    const expDate = expiresAt instanceof Date ? expiresAt : new Date(Date.now() + 2 * 60 * 60 * 1000);
+    await pool.query(
+      'INSERT INTO revoked_tokens (token_id, expires_at) VALUES (?, ?) ON DUPLICATE KEY UPDATE expires_at = VALUES(expires_at)',
+      [tokenId, expDate]
+    );
+  } catch (err) {
+    // DB 테이블이 없거나 장애 시 인메모리 캐시로 유지
+    console.error('Failed to save revoked token to DB:', err.message);
+  }
+};
 
 module.exports = { auth, optionalAuth, adminOnly, signToken, revokeToken };

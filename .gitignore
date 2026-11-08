@@ -1,6 +1,9 @@
 node_modules/
 dist/
 .env
+.env.*
+server/.env
+server/node_modules/
 pum/
 vite.config.js
 vite.config.d.ts

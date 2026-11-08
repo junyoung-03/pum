@@ -2,11 +2,13 @@
 // listen은 server.js에서 하고, 여기서는 app만 내보냅니다. → 테스트(supertest)에서 그대로 사용
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok' } }));
 

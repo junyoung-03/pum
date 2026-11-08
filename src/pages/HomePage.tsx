@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import type { FavoriteRank, FeaturedPerfume } from '../data/perfumeData';
 import useFavorite from '../data/useFavorite';
-import { Button, PerfumeImage } from '../components/shared';
+import { PerfumeImage } from '../components/shared';
 
 export default function HomePage() {
   const { favoriteIds, toggleFavorite } = useFavorite();
@@ -52,10 +52,8 @@ export default function HomePage() {
           <p className="hero-subtitle">
             당신의 분위기를 완성하는 프리미엄 향수 큐레이션
           </p>
-          <Link to="/recommend">
-            <Button variant="primary" size="large">
-              나에게 맞는 향수 찾기
-            </Button>
+          <Link to="/recommend" className="btn btn-primary btn-large">
+            나에게 맞는 향수 찾기
           </Link>
         </div>
       </section>
@@ -106,10 +104,8 @@ export default function HomePage() {
                     >
                       {favoriteIds.includes(perfume.id) ? '♥' : '♡'}
                     </button>
-                    <Link to={`/detail/${perfume.id}`}>
-                      <Button variant="ghost" size="small">
-                        View More
-                      </Button>
+                    <Link to={`/detail/${perfume.id}`} className="btn btn-ghost btn-small">
+                      View More
                     </Link>
                   </div>
                 </div>
@@ -117,8 +113,8 @@ export default function HomePage() {
             ))}
           </div>
           <div className="section-cta">
-            <Link to="/list">
-              <Button variant="secondary">전체 컬렉션 보기</Button>
+            <Link to="/list" className="btn btn-secondary btn-medium">
+              전체 컬렉션 보기
             </Link>
           </div>
         </div>
@@ -154,10 +150,8 @@ export default function HomePage() {
         <div className="container cta-content">
           <h2>나에게 맞는 향수를 찾고 싶다면?</h2>
           <p>4가지 질문으로 당신만의 시그니처 향수를 추천받아보세요</p>
-          <Link to="/recommend">
-            <Button variant="primary" size="large">
-              향수 추천받기
-            </Button>
+          <Link to="/recommend" className="btn btn-primary btn-large">
+            향수 추천받기
           </Link>
         </div>
       </section>

@@ -149,11 +149,11 @@ export default function DetailPage() {
               >
                 {isFavorite ? '♥ 찜 해제' : '♡ 찜하기'}
               </Button>
-              <Link to={`/review?perfumeId=${perfume.id}`}>
-                <Button variant="secondary">리뷰 쓰기</Button>
+              <Link to={`/review?perfumeId=${perfume.id}`} className="btn btn-secondary btn-medium">
+                리뷰 쓰기
               </Link>
-              <Link to={`/market?brand=${encodeURIComponent(perfume.brand)}`}>
-                <Button variant="ghost">중고 매물 보기</Button>
+              <Link to={`/market?brand=${encodeURIComponent(perfume.brand)}`} className="btn btn-ghost btn-medium">
+                중고 매물 보기
               </Link>
             </div>
           </div>
@@ -224,10 +224,8 @@ export default function DetailPage() {
           )}
 
           <div className="section-cta-left">
-            <Link to={`/review?perfumeId=${perfume.id}`}>
-              <Button variant="secondary" size="small">
-                리뷰 전체 보기 · 작성하기
-              </Button>
+            <Link to={`/review?perfumeId=${perfume.id}`} className="btn btn-secondary btn-small">
+              리뷰 전체 보기 · 작성하기
             </Link>
           </div>
         </section>

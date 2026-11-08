@@ -16,6 +16,7 @@ export default function MyPage() {
   const favoriteCount = useSelector((state: RootState) => state.favorite.ids.length);
 
   const [nickname, setNickname] = useState(user?.nickname ?? '');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [passwordCheck, setPasswordCheck] = useState('');
   const [message, setMessage] = useState<{ type: 'info' | 'error'; text: string } | null>(null);
@@ -43,8 +44,12 @@ export default function MyPage() {
 
   const handlePassword = async (e: FormEvent) => {
     e.preventDefault();
+    if (!currentPassword) {
+      setMessage({ type: 'error', text: '현재 비밀번호를 입력해 주세요.' });
+      return;
+    }
     if (password.length < 6) {
-      setMessage({ type: 'error', text: '비밀번호는 6자 이상이어야 합니다.' });
+      setMessage({ type: 'error', text: '새 비밀번호는 6자 이상이어야 합니다.' });
       return;
     }
     if (password !== passwordCheck) {
@@ -52,7 +57,8 @@ export default function MyPage() {
       return;
     }
     try {
-      await api<User>('/users/me', 'PUT', { password });
+      await api<User>('/users/me', 'PUT', { currentPassword, password });
+      setCurrentPassword('');
       setPassword('');
       setPasswordCheck('');
       setMessage({ type: 'info', text: '비밀번호가 변경되었습니다.' });
@@ -121,6 +127,14 @@ export default function MyPage() {
 
             <form onSubmit={handlePassword} className="panel-block">
               <h3 className="panel-title">비밀번호 변경</h3>
+              <div className="form-group">
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="현재 비밀번호"
+                />
+              </div>
               <div className="form-group">
                 <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="새 비밀번호 (6자 이상)" />
               </div>

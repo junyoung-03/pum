@@ -16,7 +16,9 @@ export default function useFavorite() {
 
   const toggleFavorite = async (perfumeId: string) => {
     if (!isLoggedIn) {
-      navigate('/login', { state: { from: location.pathname, message: '찜하려면 로그인이 필요합니다.' } });
+      if (window.confirm('찜 기능은 로그인 후 이용하실 수 있습니다. 로그인 페이지로 이동하시겠습니까?')) {
+        navigate('/login', { state: { from: location.pathname, message: '찜하려면 로그인이 필요합니다.' } });
+      }
       return false;
     }
     const isFavorite = favoriteIds.includes(perfumeId);

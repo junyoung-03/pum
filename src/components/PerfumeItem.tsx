@@ -43,10 +43,8 @@ export default function PerfumeItem({
           >
             {isFavorite ? '♥ 찜 해제' : '♡ 찜하기'}
           </Button>
-          <Link to={`/detail/${perfume.id}`}>
-            <Button variant="secondary" size="small">
-              상세보기
-            </Button>
+          <Link to={`/detail/${perfume.id}`} className="btn btn-secondary btn-small">
+            상세보기
           </Link>
         </div>
       </div>

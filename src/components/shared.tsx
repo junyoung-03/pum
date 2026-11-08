@@ -36,11 +36,21 @@ export function Badge({
   return <span className={`badge badge-${variant}`}>{children}</span>;
 }
 
-function hasImageSrc(image: string) {
-  return image.startsWith('/') || image.startsWith('images/');
+function hasImageSrc(image?: string) {
+  if (!image) return false;
+  return (
+    image.startsWith('/') ||
+    image.startsWith('images/') ||
+    image.startsWith('http://') ||
+    image.startsWith('https://') ||
+    image.startsWith('data:')
+  );
 }
 
 function getImageSrc(image: string) {
+  if (image.startsWith('http://') || image.startsWith('https://') || image.startsWith('data:')) {
+    return image;
+  }
   const path = image.startsWith('/') ? image.slice(1) : image;
   return `${import.meta.env.BASE_URL}${path}`;
 }

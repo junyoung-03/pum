@@ -75,7 +75,7 @@ export default function RecommendPage() {
   const currentQuestion = questionData.find((q) => q.id === state.step);
   const isLastStep = state.step === questionData.length;
   const currentAnswer = currentQuestion ? state.answers[currentQuestion.key] : '';
-  const percentage = (state.step / questionData.length) * 100;
+  const percentage = questionData.length > 0 ? (state.step / questionData.length) * 100 : 0;
 
   const handleOptionSelect = (value: string) => {
     if (currentQuestion) {
