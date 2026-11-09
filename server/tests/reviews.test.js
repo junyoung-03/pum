@@ -1,4 +1,4 @@
-// 2. 리뷰 라우터 테스트
+ㅈ// 2. 리뷰 라우터 테스트
 // 핵심 API: POST /api/reviews (리뷰 작성)
 const { app, request, login, bearer } = require('./helpers');
 

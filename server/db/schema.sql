@@ -4,6 +4,7 @@
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS revoked_tokens;
+DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS market_posts;
 DROP TABLE IF EXISTS recommend_history;
 DROP TABLE IF EXISTS recommend_questions;
@@ -127,4 +128,28 @@ CREATE TABLE market_posts (
   updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id)    REFERENCES users(id)    ON DELETE CASCADE,
   FOREIGN KEY (perfume_id) REFERENCES perfumes(id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 거래 (중고 판매글 구매 → 관리자 중개 배송)
+--   구매신청   : 구매자가 배송 정보를 입력하고 구매 (판매글은 '예약중')
+--   판매자발송 : 판매자가 물품을 관리자(회사)에게 보냄
+--   인수완료   : 관리자가 물품과 대금을 받았음을 확인 (물품 인수)
+--   인계완료   : 관리자가 구매자에게 물품을 보냄 (물품 인계, 판매글은 '판매완료')
+-- 구매자 개인정보(이름·전화번호·주소)는 구매자 본인과 관리자만 조회할 수 있음
+CREATE TABLE orders (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  post_id         INT NOT NULL UNIQUE,            -- 판매글 1개당 거래 1건
+  buyer_id        INT NOT NULL,
+  price           INT NOT NULL,                   -- 구매 시점 가격
+  receiver_name   VARCHAR(30)  NOT NULL,
+  receiver_phone  VARCHAR(20)  NOT NULL,
+  address         VARCHAR(200) NOT NULL,
+  stage           ENUM('구매신청', '판매자발송', '인수완료', '인계완료') NOT NULL DEFAULT '구매신청',
+  shipped_at      DATETIME NULL,                  -- 판매자 발송 시각
+  received_at     DATETIME NULL,                  -- 관리자 인수 시각
+  delivered_at    DATETIME NULL,                  -- 관리자 인계 시각
+  created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (post_id)  REFERENCES market_posts(id) ON DELETE CASCADE,
+  FOREIGN KEY (buyer_id) REFERENCES users(id)        ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

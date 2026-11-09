@@ -7,6 +7,8 @@ export type Purpose = '데일리' | '데이트' | '출근' | '특별한 날';
 export type Category = 'Floral' | 'Woody' | 'Musk' | 'Citrus' | 'Amber';
 export type PriceLevel = 'Premium' | 'Luxury' | 'Niche';
 export type MarketStatus = '판매중' | '예약중' | '판매완료';
+// 거래 단계: 구매신청 → 판매자발송 → 인수완료(물품 인수) → 인계완료(물품 인계)
+export type OrderStage = '구매신청' | '판매자발송' | '인수완료' | '인계완료';
 
 export const CATEGORIES: Category[] = ['Floral', 'Woody', 'Musk', 'Citrus', 'Amber'];
 export const MOODS: Mood[] = ['고급스러운', '상큼한', '차분한', '로맨틱한', '세련된', '우아한'];
@@ -14,6 +16,7 @@ export const SEASONS: Season[] = ['봄', '여름', '가을', '겨울'];
 export const PURPOSES: Purpose[] = ['데일리', '데이트', '출근', '특별한 날'];
 export const PRICE_LEVELS: PriceLevel[] = ['Premium', 'Luxury', 'Niche'];
 export const MARKET_STATUS: MarketStatus[] = ['판매중', '예약중', '판매완료'];
+export const ORDER_STAGES: OrderStage[] = ['구매신청', '판매자발송', '인수완료', '인계완료'];
 
 // GET /api/perfumes, /api/perfumes/:id
 export interface Perfume {
@@ -161,8 +164,32 @@ export interface MarketPost {
   content: string | null;
   status: MarketStatus;
   seller: { id: number; nickname: string };
+  // 구매 신청이 들어온 경우 거래 진행 정보 (개인정보 없음)
+  order: { id: number; stage: OrderStage; buyerId: number } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// 구매자 배송 정보 (구매자 본인과 관리자에게만 내려옴)
+export interface OrderReceiver {
+  name: string;
+  phone: string;
+  address: string;
+}
+
+// GET /api/orders, /api/orders/my, /api/orders/sales, /api/orders/:id
+export interface Order {
+  id: number;
+  stage: OrderStage;
+  price: number;
+  post: { id: number; title: string; brand: string; perfumeId: string | null; status: MarketStatus };
+  seller: { id: number; nickname: string };
+  buyer: { id: number; nickname: string };
+  receiver: OrderReceiver | null;
+  shippedAt: string | null;
+  receivedAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
 }
 
 export interface Pagination {

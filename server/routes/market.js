@@ -7,6 +7,9 @@
 // PATCH  /:id/status       거래 상태 변경 (본인만: 판매중 / 예약중 / 판매완료)
 // DELETE /:id              판매글 삭제 (본인만)
 //
+// 구매 신청(거래)이 들어온 판매글은 상태가 거래 단계에 따라 자동으로 바뀌므로
+// 수정·상태 변경·삭제를 막습니다. → 거래는 /api/orders 라우터에서 처리
+//
 // 주의: '/my'는 '/:id'보다 위에 선언해야 합니다.
 const express = require('express');
 const pool = require('../db/pool');
@@ -17,9 +20,10 @@ const { CATEGORIES, MARKET_STATUS } = require('../utils/constants');
 const router = express.Router();
 
 const SELECT_POST = `
-  SELECT m.*, u.nickname
+  SELECT m.*, u.nickname, o.id AS order_id, o.stage AS order_stage, o.buyer_id AS order_buyer_id
     FROM market_posts m
-    JOIN users u ON u.id = m.user_id`;
+    JOIN users u ON u.id = m.user_id
+    LEFT JOIN orders o ON o.post_id = m.id`;
 
 const toPost = (row) => ({
   id: row.id,
@@ -33,6 +37,8 @@ const toPost = (row) => ({
   content: row.content,
   status: row.status,
   seller: { id: row.user_id, nickname: row.nickname },
+  // 거래 진행 정보 (구매자 개인정보는 포함하지 않음)
+  order: row.order_id ? { id: row.order_id, stage: row.order_stage, buyerId: row.order_buyer_id } : null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -47,6 +53,13 @@ async function findOwnPost(id, userId) {
   const post = await findPost(id);
   if (post.user_id !== userId) throw new HttpError(403, '본인이 작성한 판매글만 수정·삭제할 수 있습니다.');
   return post;
+}
+
+// 구매 신청이 들어온 판매글은 수정·상태 변경·삭제 불가 (409)
+function checkNoOrder(post) {
+  if (post.order_id) {
+    throw new HttpError(409, '구매 신청이 들어온 판매글은 수정·삭제하거나 상태를 직접 바꿀 수 없습니다. (거래 단계에 따라 자동 변경)');
+  }
 }
 
 /**
@@ -189,7 +202,7 @@ router.put(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    await findOwnPost(req.params.id, req.user.id);
+    checkNoOrder(await findOwnPost(req.params.id, req.user.id));
     if (req.body.status !== undefined) {
       throw new HttpError(400, '거래 상태는 PATCH /api/market/:id/status로 변경해 주세요.');
     }
@@ -207,7 +220,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const { status } = req.body;
     if (!MARKET_STATUS.includes(status)) throw new HttpError(400, `status는 ${MARKET_STATUS.join(', ')} 중 하나여야 합니다.`);
-    await findOwnPost(req.params.id, req.user.id);
+    checkNoOrder(await findOwnPost(req.params.id, req.user.id));
     await pool.query('UPDATE market_posts SET status = ? WHERE id = ?', [status, req.params.id]);
     ok(res, toPost(await findPost(req.params.id)));
   })
@@ -218,7 +231,7 @@ router.delete(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    await findOwnPost(req.params.id, req.user.id);
+    checkNoOrder(await findOwnPost(req.params.id, req.user.id));
     await pool.query('DELETE FROM market_posts WHERE id = ?', [req.params.id]);
     ok(res, { id: Number(req.params.id), message: '판매글이 삭제되었습니다.' });
   })

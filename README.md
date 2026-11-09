@@ -56,8 +56,12 @@ npm install
 | 내 추천 기록 | 기록 목록·추천 이유·삭제 | `GET /api/recommend/history`, `GET·DELETE /api/recommend/history/:id` |
 | FAVORITES | 찜 추가·해제, 내 찜 목록, 전체 비우기 | `POST·DELETE /api/favorites/:id`, `GET·DELETE /api/favorites` |
 | MARKET | 판매글 목록(브랜드·계열·상태·가격 필터, 정렬), 상세, 등록·수정, 거래 상태 변경, 삭제, 내 판매글 | `/api/market` 7개 |
+| MARKET 구매 | 판매글 상세의 [구매하기] → 모달에서 이름·전화번호·배송주소 입력 → 판매글 예약중, 구매 취소 | `POST /api/orders`, `DELETE /api/orders/:id` |
+| 마이페이지 거래 관리 | 판매 거래(관리자에게 발송 완료 처리), 구매 내역(진행 단계·배송지) | `GET /api/orders/sales`, `PATCH /api/orders/:id/ship`, `GET /api/orders/my` |
 | LOGIN · JOIN · 마이페이지 | 로그인·회원가입·로그아웃, 닉네임·비밀번호 변경, 탈퇴 | `/api/users` 6개 |
 | ADMIN (관리자) | 컬렉션 향수 등록·수정·삭제, 대표 향수 지정 | `POST /api/perfumes`, `PUT·DELETE /api/perfumes/:id` |
+| ADMIN 물품 인수 | 판매자가 보낸 물품·대금 확인 → 인수 확인, 거래 취소(판매중으로) | `GET /api/orders`, `PATCH /api/orders/:id/receive`, `DELETE /api/orders/:id` |
+| ADMIN 물품 인계 | 구매자 배송 정보 확인 → 구매자에게 발송 → 판매완료, 인수 취소·인계 취소·거래 취소 | `PATCH /api/orders/:id/deliver`, `DELETE /api/orders/:id/receive`, `DELETE /api/orders/:id/deliver`, `DELETE /api/orders/:id` |
 
 ## 참고
 - GitHub Pages에는 화면 파일만 올라가고 API 서버는 실행되지 않으므로, 데이터가 필요한 기능은 로컬 실행으로 확인합니다.

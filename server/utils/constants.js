@@ -6,4 +6,6 @@ module.exports = {
   PURPOSES: ['데일리', '데이트', '출근', '특별한 날'],
   PRICE_LEVELS: ['Premium', 'Luxury', 'Niche'],
   MARKET_STATUS: ['판매중', '예약중', '판매완료'],
+  // 거래 단계: 구매신청 → 판매자발송 → 인수완료(물품 인수) → 인계완료(물품 인계)
+  ORDER_STAGES: ['구매신청', '판매자발송', '인수완료', '인계완료'],
 };

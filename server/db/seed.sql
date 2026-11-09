@@ -43,3 +43,8 @@ INSERT INTO market_posts (user_id, perfume_id, title, brand, category, volume_ml
   (2, 'le-labo-santal-33', '르라보 상탈 33 50ml 잔량 80%', 'LE LABO', 'Woody', 50, 80, 150000, '작년 백화점 구매, 실내 보관했습니다. 박스 있어요.', '판매중'),
   (3, 'jo-malone-english-pear', '조말론 잉글리쉬 페어 30ml', 'JO MALONE', 'Floral', 30, 60, 45000, '선물받았는데 취향이 아니라 판매합니다.', '예약중'),
   (2, NULL, '바이레도 블랑쉬 미니어처 5ml', 'BYREDO', 'Musk', 5, 100, 25000, '미개봉 미니어처입니다.', '판매중');
+
+-- 거래 샘플: 향수러버(2)가 데일리향수(3)의 '조말론 잉글리쉬 페어'(판매글 2, 예약중)를 구매 신청한 상태
+-- (배송 정보는 테스트용 가짜 정보)
+INSERT INTO orders (post_id, buyer_id, price, receiver_name, receiver_phone, address, stage) VALUES
+  (2, 2, 45000, '김향수', '010-1234-5678', '서울특별시 강남구 테헤란로 123, 101호', '구매신청');

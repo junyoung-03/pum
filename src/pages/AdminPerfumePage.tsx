@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { api, errorMessage } from '../api/client';
 import type { RootState } from '../data/store';
@@ -11,6 +11,7 @@ import {
   SEASONS,
   Category,
   Mood,
+  Order,
   Perfume,
   PriceLevel,
   Purpose,
@@ -18,6 +19,7 @@ import {
 } from '../data/perfumeData';
 import { Button } from '../components/shared';
 import LoginRequired from '../components/LoginRequired';
+import AdminOrdersPanel, { AdminOrderTab, countPending } from './AdminOrdersPanel';
 
 interface FormState {
   id: string;
@@ -98,9 +100,29 @@ function toggleValue<T>(list: T[], value: T) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-// 향수 관리 (관리자): POST /api/perfumes, PUT /api/perfumes/:id, DELETE /api/perfumes/:id
+type AdminTab = 'perfume' | AdminOrderTab;
+
+const ADMIN_TABS: { key: AdminTab; label: string }[] = [
+  { key: 'perfume', label: '향수 관리' },
+  { key: 'receive', label: '물품 인수' },
+  { key: 'deliver', label: '물품 인계' }
+];
+
+const TAB_DESCRIPTION: Record<AdminTab, string> = {
+  perfume: '컬렉션 향수 등록·수정·삭제 (관리자 전용)',
+  receive: '판매자가 보낸 물품과 구매자의 대금을 받았는지 확인합니다',
+  deliver: '인수가 끝난 물품을 구매자의 배송 정보로 보냅니다'
+};
+
+// 관리자 페이지
+// - 향수 관리: POST /api/perfumes, PUT /api/perfumes/:id, DELETE /api/perfumes/:id
+// - 물품 인수·물품 인계: AdminOrdersPanel (/api/orders)
 export default function AdminPerfumePage() {
   const user = useSelector((state: RootState) => state.auth.user);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const tab: AdminTab = tabParam === 'receive' || tabParam === 'deliver' ? tabParam : 'perfume';
+  const [pending, setPending] = useState<Record<AdminOrderTab, number>>({ receive: 0, deliver: 0 });
   const [perfumes, setPerfumes] = useState<Perfume[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -113,6 +135,14 @@ export default function AdminPerfumePage() {
 
   useEffect(() => {
     if (user?.role === 'admin') load();
+  }, [user]);
+
+  // 탭에 처리 대기 건수 표시
+  useEffect(() => {
+    if (user?.role !== 'admin') return;
+    api<Order[]>('/orders')
+      .then(({ data }) => setPending(countPending(data)))
+      .catch(() => undefined);
   }, [user]);
 
   if (!user) {
@@ -210,11 +240,32 @@ export default function AdminPerfumePage() {
       <div className="container">
         <div className="section-title section-title-center">
           <h2>Admin</h2>
-          <p>컬렉션 향수 등록·수정·삭제 (관리자 전용)</p>
+          <p>{TAB_DESCRIPTION[tab]}</p>
         </div>
 
-        {message && <p className={`notice notice-${message.type}`}>{message.text}</p>}
+        <div className="admin-tabs">
+          <div className="sort-toggle" role="tablist" aria-label="관리자 메뉴">
+            {ADMIN_TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.key}
+                className={tab === t.key ? 'active' : ''}
+                onClick={() => setSearchParams(t.key === 'perfume' ? {} : { tab: t.key })}
+              >
+                {t.label}
+                {t.key !== 'perfume' && pending[t.key] > 0 && <span className="tab-count">{pending[t.key]}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
 
+        {tab !== 'perfume' && <AdminOrdersPanel key={tab} tab={tab} onCountChange={setPending} />}
+
+        {tab === 'perfume' && message && <p className={`notice notice-${message.type}`}>{message.text}</p>}
+
+        {tab === 'perfume' && (
         <div className="admin-layout">
           <form className="panel admin-form" onSubmit={handleSubmit}>
             <h3 className="panel-title">{editingId ? `향수 수정: ${editingId}` : '새 향수 등록'}</h3>
@@ -383,6 +434,7 @@ export default function AdminPerfumePage() {
             </ul>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ app.use('/api/reviews', require('./routes/reviews')); // 2. 리뷰
 app.use('/api/favorites', require('./routes/favorites')); // 3. 찜
 app.use('/api/recommend', require('./routes/recommend')); // 4. 추천
 app.use('/api/market', require('./routes/market')); // 5. 중고 판매글
+app.use('/api/orders', require('./routes/orders')); // 6. 거래 (관리자 중개 안전거래)
 
 // 없는 경로
 app.use((req, res) => {

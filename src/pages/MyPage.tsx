@@ -7,8 +7,10 @@ import type { RootState } from '../data/store';
 import type { User } from '../data/perfumeData';
 import { Button } from '../components/shared';
 import LoginRequired from '../components/LoginRequired';
+import MyOrdersSection from './MyOrdersSection';
 
 // 내 정보: GET /api/users/me, PUT /api/users/me, DELETE /api/users/me
+// 거래 관리 (판매 거래·구매 내역): MyOrdersSection
 export default function MyPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -160,6 +162,8 @@ export default function MyPage() {
             </div>
           </div>
         </div>
+
+        <MyOrdersSection />
       </div>
     </div>
   );

@@ -2745,3 +2745,348 @@ input, select, textarea {
     width: 90px;
   }
 }
+
+/* ===================================
+   거래 (구매 모달 · 거래 단계 · 마이페이지 거래 관리 · 관리자 인수/인계)
+   =================================== */
+
+/* 구매 버튼 영역 */
+.buy-panel {
+  margin-bottom: var(--space-lg);
+}
+
+.buy-panel-note {
+  margin-top: var(--space-sm);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+/* 모달 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+  background: rgba(43, 33, 27, 0.45);
+}
+
+.modal {
+  width: 100%;
+  max-width: 460px;
+  max-height: calc(100vh - 2 * var(--space-md));
+  overflow-y: auto;
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-lg) var(--space-lg) 0;
+}
+
+.modal-header h3 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.modal-close {
+  width: 36px;
+  height: 36px;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+}
+
+.modal-close:hover {
+  background: var(--color-bg-secondary);
+}
+
+.modal-body {
+  padding: var(--space-lg);
+}
+
+.modal-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-lg);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.modal-summary-title {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.modal-summary-price {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.modal-note {
+  margin-bottom: var(--space-md);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+/* 거래 단계 */
+.order-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: var(--space-sm) 0 var(--space-md);
+}
+
+.order-steps li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  text-align: center;
+}
+
+/* 단계 사이 연결선 */
+.order-steps li + li::before {
+  content: '';
+  position: absolute;
+  top: 13px;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--color-border);
+}
+
+.order-steps li.done::before,
+.order-steps li.current::before {
+  background: var(--color-accent);
+}
+
+.order-step-dot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-white);
+  border: 2px solid var(--color-border);
+  border-radius: 50%;
+}
+
+.order-steps li.done .order-step-dot {
+  color: var(--color-white);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.order-steps li.current .order-step-dot {
+  color: var(--color-white);
+  background: var(--color-accent-dark);
+  border-color: var(--color-accent-dark);
+}
+
+.order-step-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.order-steps li.current .order-step-label {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.order-guide {
+  margin-bottom: var(--space-md);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+/* 마이페이지 거래 관리 */
+.mypage-orders {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2xl);
+  align-items: start;
+  margin-top: var(--space-2xl);
+}
+
+.mypage-orders > .notice {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+.count-pill,
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  font-family: var(--font-body);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-white);
+  background: var(--color-accent);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.empty-line {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.empty-line a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.order-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.order-list > li {
+  padding: var(--space-md);
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.order-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.order-item-head .btn {
+  flex-shrink: 0;
+}
+
+.order-item-title {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.order-item-title:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.order-item-meta {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.order-list .order-guide {
+  margin-bottom: 0;
+}
+
+.order-receiver {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  word-break: keep-all;
+}
+
+/* 관리자 탭 · 인수/인계 */
+.admin-tabs {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-xl);
+}
+
+.admin-tabs .sort-toggle button {
+  padding: var(--space-sm) var(--space-lg);
+  font-size: 0.875rem;
+}
+
+.admin-orders {
+  grid-template-columns: 1.3fr 1fr;
+}
+
+.receiver-box {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: var(--space-xs) var(--space-md);
+  padding: var(--space-md);
+  font-size: 0.875rem;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.receiver-box dt {
+  color: var(--color-text-secondary);
+}
+
+.receiver-box dd {
+  word-break: keep-all;
+}
+
+@media (max-width: 1024px) {
+  .mypage-orders,
+  .admin-orders {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .order-item-head {
+    flex-direction: column;
+  }
+
+  .order-step-label {
+    font-size: 0.6875rem;
+  }
+
+  .admin-tabs .sort-toggle button {
+    padding: var(--space-sm) var(--space-md);
+  }
+}
+
+/* 제목 글꼴(Cormorant)의 숫자가 아래첨자처럼 보이지 않도록 일반 숫자 모양 사용 */
+.mypage-orders .panel-title,
+.admin-orders .panel-title {
+  font-variant-numeric: lining-nums;
+}
+
+/* 관리자 거래 버튼 (진행 · 되돌리기 · 거래 취소) */
+.order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.receiver-box + .order-actions {
+  margin-top: var(--space-md);
+}
+
+.order-list .receiver-box {
+  margin-top: var(--space-sm);
+}
