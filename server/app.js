@@ -10,6 +10,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// [시스템 API] 서버 가동 및 헬스체크 확인
 app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok' } }));
 
 app.use('/api/users', require('./routes/users')); // 회원 (라우터 개수 제외)

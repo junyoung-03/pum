@@ -6,11 +6,11 @@
 // GET    /history/:id      기록 상세 (로그인, 본인만)
 // DELETE /history/:id      기록 삭제 (로그인, 본인만)
 const express = require('express');
-const pool = require('../db/pool');
+const { Op, Sequelize } = require('sequelize');
+const { RecommendQuestion, RecommendHistory, Perfume } = require('../models');
 const { auth, optionalAuth } = require('../middlewares/auth');
 const { HttpError, asyncHandler, ok } = require('../utils/http');
 const { CATEGORIES, MOODS, SEASONS, PURPOSES } = require('../utils/constants');
-const { toPerfume, toPerfumeSummary, parseJson } = require('../utils/perfume');
 
 const router = express.Router();
 
@@ -31,8 +31,8 @@ function generateReason(answers, perfume) {
 
   const criteriaText = parts.length > 0 ? `선택하신 ${parts.join(', ')}를 기준으로 분석했습니다.` : '';
   const brandText = `${perfume.brand}의 ${perfume.name}은(는)`;
-  const moodDesc = perfume.moodTags.slice(0, 2).join(', ');
-  const purposeDesc = perfume.purpose.join(' 또는 ');
+  const moodDesc = (perfume.moodTags || []).slice(0, 2).join(', ');
+  const purposeDesc = (perfume.purpose || []).join(' 또는 ');
   return `${criteriaText} ${brandText} ${moodDesc} 무드를 연출하며, ${purposeDesc} 상황에 특히 잘 어울리는 향수입니다.`;
 }
 
@@ -45,11 +45,15 @@ function calculateRecommendation(answers, perfumes) {
   const results = perfumes.map((perfume) => {
     let score = 0;
     const matchedCriteria = [];
-    if (answers.mood && perfume.mood.includes(answers.mood)) {
+    const pMood = perfume.mood || [];
+    const pSeason = perfume.season || [];
+    const pPurpose = perfume.purpose || [];
+
+    if (answers.mood && pMood.includes(answers.mood)) {
       score += 30;
       matchedCriteria.push(`${answers.mood} 분위기`);
     }
-    if (answers.season && perfume.season.includes(answers.season)) {
+    if (answers.season && pSeason.includes(answers.season)) {
       score += 25;
       matchedCriteria.push(`${answers.season} 계절`);
     }
@@ -57,14 +61,13 @@ function calculateRecommendation(answers, perfumes) {
       score += 30;
       matchedCriteria.push(`${answers.category} 계열`);
     }
-    if (answers.purpose && perfume.purpose.includes(answers.purpose)) {
+    if (answers.purpose && pPurpose.includes(answers.purpose)) {
       score += 15;
       matchedCriteria.push(`${answers.purpose} 용도`);
     }
     return { perfume, score, matchedCriteria };
   });
 
-  // 점수가 같으면 컬렉션 순서(sort_order)가 앞인 향수 (프론트와 같은 결과)
   results.sort((a, b) => b.score - a.score);
   const best = results[0];
 
@@ -79,29 +82,41 @@ function calculateRecommendation(answers, perfumes) {
   return { ...best, reason: generateReason(answers, best.perfume) };
 }
 
-const toHistory = (row) => ({
-  id: row.id,
-  answers: { mood: row.mood, season: row.season, category: row.category, purpose: row.purpose },
-  perfume: row.perfume_id ? toPerfumeSummary({ id: row.perfume_id, brand: row.brand, name: row.name, image: row.image }) : null,
-  score: row.score,
-  matchedCriteria: parseJson(row.matched_criteria),
-  reason: row.reason,
-  createdAt: row.created_at,
-});
+function formatHistory(row) {
+  const r = row.toJSON ? row.toJSON() : row;
+  return {
+    id: r.id,
+    answers: { mood: r.mood, season: r.season, category: r.category, purpose: r.purpose },
+    perfume: r.perfume
+      ? { id: r.perfume.id, brand: r.perfume.brand, name: r.perfume.name, image: r.perfume.image }
+      : null,
+    score: r.score,
+    matchedCriteria: r.matchedCriteria,
+    reason: r.reason,
+    createdAt: r.createdAt,
+  };
+}
 
-const SELECT_HISTORY = `
-  SELECT h.*, p.brand, p.name, p.image
-    FROM recommend_history h
-    LEFT JOIN perfumes p ON p.id = h.perfume_id`;
-
-// 설문 질문: GET /api/recommend/questions
+/**
+ * [핵심 API 1] 추천 설문 질문 및 선택지 조회
+ * - Method / Path: GET /api/recommend/questions
+ * - 핵심 로직: Sequelize `RecommendQuestion` 모델에서 문항 및 선택지 목록 순서대로 반환
+ */
 router.get(
   '/questions',
   asyncHandler(async (req, res) => {
-    const [rows] = await pool.query('SELECT * FROM recommend_questions ORDER BY sort_order ASC');
+    const rows = await RecommendQuestion.findAll({
+      order: [['sortOrder', 'ASC']],
+    });
     ok(
       res,
-      rows.map((r) => ({ id: r.id, key: r.q_key, title: r.title, subtitle: r.subtitle, options: parseJson(r.options) }))
+      rows.map((r) => ({
+        id: r.id,
+        key: r.qKey,
+        title: r.title,
+        subtitle: r.subtitle,
+        options: r.options,
+      }))
     );
   })
 );
@@ -110,40 +125,68 @@ router.get(
 router.get(
   '/stats',
   asyncHandler(async (req, res) => {
-    const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM recommend_history');
+    const total = await RecommendHistory.count();
 
     const topAnswers = {};
     for (const key of Object.keys(ANSWER_RULES)) {
-      // key는 위 고정 목록에서만 오므로 컬럼명으로 써도 안전
-      const [rows] = await pool.query(
-        `SELECT ${key} AS value, COUNT(*) AS cnt
-           FROM recommend_history
-          WHERE ${key} <> ''
-          GROUP BY ${key}
-          ORDER BY cnt DESC, value ASC
-          LIMIT 3`
-      );
+      const rows = await RecommendHistory.findAll({
+        attributes: [
+          [Sequelize.col(key), 'value'],
+          [Sequelize.fn('COUNT', Sequelize.col('id')), 'cnt'],
+        ],
+        where: {
+          [key]: { [Op.ne]: '' },
+        },
+        group: [key],
+        order: [[Sequelize.literal('cnt'), 'DESC'], [key, 'ASC']],
+        limit: 3,
+        raw: true,
+      });
       topAnswers[key] = rows.map((r) => ({ value: r.value, count: Number(r.cnt) }));
     }
 
-    const [perfumeRows] = await pool.query(
-      `SELECT p.id, p.brand, p.name, p.image, COUNT(*) AS cnt
-         FROM recommend_history h
-         JOIN perfumes p ON p.id = h.perfume_id
-        GROUP BY p.id, p.brand, p.name, p.image
-        ORDER BY cnt DESC, p.id ASC
-        LIMIT 5`
-    );
+    const perfumeRows = await RecommendHistory.findAll({
+      attributes: [
+        [Sequelize.fn('COUNT', Sequelize.col('RecommendHistory.id')), 'cnt'],
+      ],
+      include: [
+        {
+          model: Perfume,
+          as: 'perfume',
+          attributes: ['id', 'brand', 'name', 'image'],
+          required: true,
+        },
+      ],
+      group: ['RecommendHistory.perfume_id', 'perfume.id', 'perfume.brand', 'perfume.name', 'perfume.image'],
+      order: [[Sequelize.literal('cnt'), 'DESC'], [Sequelize.col('perfume.id'), 'ASC']],
+      limit: 5,
+      raw: true,
+      nest: true,
+    });
 
     ok(res, {
       totalCount: Number(total),
       topAnswers,
-      topPerfumes: perfumeRows.map((r) => ({ ...toPerfumeSummary(r), count: Number(r.cnt) })),
+      topPerfumes: perfumeRows.map((r) => ({
+        id: r.perfume.id,
+        brand: r.perfume.brand,
+        name: r.perfume.name,
+        image: r.perfume.image,
+        count: Number(r.cnt),
+      })),
     });
   })
 );
 
-// ★ 추천 요청: POST /api/recommend  { mood, season, category, purpose }
+/**
+ * [핵심 API 2] 개인 맞춤 향수 추천 및 가중치 점수 계산 알고리즘
+ * - Method / Path: POST /api/recommend
+ * - Request Body: { mood, season, category, purpose }
+ * - 핵심 로직:
+ *   1) 사용자의 설문 답변과 전체 향수의 속성을 대조하여 100점 만점 가중치 점수 산출
+ *   2) 최고 득점 향수 및 매칭 사유(reason)를 생성하여 클라이언트에 응답
+ *   3) 로그인 회원의 경우 `recommend_history` 테이블에 추천 결과를 Sequelize create로 영속 저장
+ */
 router.post(
   '/',
   optionalAuth,
@@ -162,29 +205,26 @@ router.post(
       throw new HttpError(400, '최소 한 개 이상의 답변을 선택해 주세요.');
     }
 
-    const [rows] = await pool.query('SELECT * FROM perfumes ORDER BY sort_order ASC, id ASC');
-    if (rows.length === 0) throw new HttpError(404, '추천할 향수가 없습니다.');
-    const result = calculateRecommendation(answers, rows.map(toPerfume));
+    const perfumes = await Perfume.findAll({
+      order: [['sortOrder', 'ASC'], ['id', 'ASC']],
+    });
+    if (perfumes.length === 0) throw new HttpError(404, '추천할 향수가 없습니다.');
+    const result = calculateRecommendation(answers, perfumes);
 
-    // 비로그인 요청도 통계용으로 저장 (user_id = NULL)
-    const [saved] = await pool.query(
-      `INSERT INTO recommend_history (user_id, mood, season, category, purpose, perfume_id, score, matched_criteria, reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        req.user ? req.user.id : null,
-        answers.mood,
-        answers.season,
-        answers.category,
-        answers.purpose,
-        result.perfume.id,
-        result.score,
-        JSON.stringify(result.matchedCriteria),
-        result.reason,
-      ]
-    );
+    const saved = await RecommendHistory.create({
+      userId: req.user ? req.user.id : null,
+      mood: answers.mood,
+      season: answers.season,
+      category: answers.category,
+      purpose: answers.purpose,
+      perfumeId: result.perfume.id,
+      score: result.score,
+      matchedCriteria: result.matchedCriteria,
+      reason: result.reason,
+    });
 
     ok(res, {
-      historyId: req.user ? saved.insertId : null,
+      historyId: req.user ? saved.id : null,
       savedToHistory: Boolean(req.user),
       answers,
       perfume: result.perfume,
@@ -195,24 +235,32 @@ router.post(
   })
 );
 
-// 내 추천 기록: GET /api/recommend/history
+/**
+ * [핵심 API 3] 내 맞춤 추천 기록 목록 조회 (히스토리 보관함)
+ * - Method / Path: GET /api/recommend/history
+ * - 핵심 로직: 로그인한 사용자가 과거에 설문 추천을 받았던 이력과 추천 사유를 최신순으로 조회
+ */
 router.get(
   '/history',
   auth,
   asyncHandler(async (req, res) => {
-    const [rows] = await pool.query(`${SELECT_HISTORY} WHERE h.user_id = ? ORDER BY h.created_at DESC, h.id DESC`, [
-      req.user.id,
-    ]);
-    ok(res, rows.map(toHistory));
+    const rows = await RecommendHistory.findAll({
+      where: { userId: req.user.id },
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
+      include: [{ model: Perfume, as: 'perfume', attributes: ['id', 'brand', 'name', 'image'] }],
+    });
+    ok(res, rows.map(formatHistory));
   })
 );
 
 // 본인 기록인지 확인 (없으면 404, 남의 기록이면 403)
 async function findOwnHistory(id, userId) {
-  const [rows] = await pool.query(`${SELECT_HISTORY} WHERE h.id = ?`, [id]);
-  if (rows.length === 0) throw new HttpError(404, '추천 기록을 찾을 수 없습니다.');
-  if (rows[0].user_id !== userId) throw new HttpError(403, '본인의 추천 기록만 볼 수 있습니다.');
-  return rows[0];
+  const history = await RecommendHistory.findByPk(id, {
+    include: [{ model: Perfume, as: 'perfume', attributes: ['id', 'brand', 'name', 'image'] }],
+  });
+  if (!history) throw new HttpError(404, '추천 기록을 찾을 수 없습니다.');
+  if (history.userId !== userId) throw new HttpError(403, '본인의 추천 기록만 볼 수 있습니다.');
+  return history;
 }
 
 // 기록 상세: GET /api/recommend/history/:id
@@ -220,8 +268,8 @@ router.get(
   '/history/:id',
   auth,
   asyncHandler(async (req, res) => {
-    const row = await findOwnHistory(req.params.id, req.user.id);
-    ok(res, toHistory(row));
+    const history = await findOwnHistory(req.params.id, req.user.id);
+    ok(res, formatHistory(history));
   })
 );
 
@@ -230,8 +278,8 @@ router.delete(
   '/history/:id',
   auth,
   asyncHandler(async (req, res) => {
-    await findOwnHistory(req.params.id, req.user.id);
-    await pool.query('DELETE FROM recommend_history WHERE id = ?', [req.params.id]);
+    const history = await findOwnHistory(req.params.id, req.user.id);
+    await history.destroy();
     ok(res, { id: Number(req.params.id), message: '추천 기록이 삭제되었습니다.' });
   })
 );

@@ -12,58 +12,41 @@
 //
 // 주의: '/my'는 '/:id'보다 위에 선언해야 합니다.
 const express = require('express');
-const pool = require('../db/pool');
+const { Op } = require('sequelize');
+const { MarketPost, User, Order, Perfume } = require('../models');
 const { auth } = require('../middlewares/auth');
 const { HttpError, asyncHandler, ok, parsePaging, pagination, toInt, requireText } = require('../utils/http');
 const { CATEGORIES, MARKET_STATUS } = require('../utils/constants');
 
 const router = express.Router();
 
-const SELECT_POST = `
-  SELECT m.*, u.nickname, o.id AS order_id, o.stage AS order_stage, o.buyer_id AS order_buyer_id
-    FROM market_posts m
-    JOIN users u ON u.id = m.user_id
-    LEFT JOIN orders o ON o.post_id = m.id`;
-
-const toPost = (row) => ({
-  id: row.id,
-  title: row.title,
-  perfumeId: row.perfume_id,
-  brand: row.brand,
-  category: row.category,
-  volumeMl: row.volume_ml,
-  remainPercent: row.remain_percent,
-  price: row.price,
-  content: row.content,
-  status: row.status,
-  seller: { id: row.user_id, nickname: row.nickname },
-  // 거래 진행 정보 (구매자 개인정보는 포함하지 않음)
-  order: row.order_id ? { id: row.order_id, stage: row.order_stage, buyerId: row.order_buyer_id } : null,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
+// Sequelize include 설정: 연관된 seller(User) 및 order(Order) 자동 조인
+const postIncludes = [
+  { model: User, as: 'seller', attributes: ['id', 'nickname'] },
+  { model: Order, as: 'order', attributes: ['id', 'stage', 'buyerId'] },
+];
 
 async function findPost(id) {
-  const [rows] = await pool.query(`${SELECT_POST} WHERE m.id = ?`, [id]);
-  if (rows.length === 0) throw new HttpError(404, '판매글을 찾을 수 없습니다.');
-  return rows[0];
+  const post = await MarketPost.findByPk(id, { include: postIncludes });
+  if (!post) throw new HttpError(404, '판매글을 찾을 수 없습니다.');
+  return post;
 }
 
 async function findOwnPost(id, userId) {
   const post = await findPost(id);
-  if (post.user_id !== userId) throw new HttpError(403, '본인이 작성한 판매글만 수정·삭제할 수 있습니다.');
+  if (post.userId !== userId) throw new HttpError(403, '본인이 작성한 판매글만 수정·삭제할 수 있습니다.');
   return post;
 }
 
 // 구매 신청이 들어온 판매글은 수정·상태 변경·삭제 불가 (409)
 function checkNoOrder(post) {
-  if (post.order_id) {
+  if (post.order) {
     throw new HttpError(409, '구매 신청이 들어온 판매글은 수정·삭제하거나 상태를 직접 바꿀 수 없습니다. (거래 단계에 따라 자동 변경)');
   }
 }
 
 /**
- * 등록·수정 본문 검사 → DB 컬럼 값
+ * 등록·수정 본문 검사 → Sequelize Model 필드
  * isCreate가 true이면 필수 값(title, volumeMl, remainPercent, price)을 확인
  * perfumeId를 넣으면 brand·category를 향수 정보에서 자동으로 채움
  */
@@ -73,13 +56,13 @@ async function bodyToColumns(body, isCreate) {
   if (isCreate || body.title !== undefined) cols.title = requireText(body.title, '제목(title)', 100);
 
   if (body.perfumeId !== undefined && body.perfumeId !== null && body.perfumeId !== '') {
-    const [rows] = await pool.query('SELECT id, brand, category FROM perfumes WHERE id = ?', [body.perfumeId]);
-    if (rows.length === 0) throw new HttpError(404, '연결할 향수를 찾을 수 없습니다.');
-    cols.perfume_id = rows[0].id;
-    if (body.brand === undefined) cols.brand = rows[0].brand;
-    if (body.category === undefined) cols.category = rows[0].category;
+    const perfume = await Perfume.findByPk(body.perfumeId, { attributes: ['id', 'brand', 'category'] });
+    if (!perfume) throw new HttpError(404, '연결할 향수를 찾을 수 없습니다.');
+    cols.perfumeId = perfume.id;
+    if (body.brand === undefined) cols.brand = perfume.brand;
+    if (body.category === undefined) cols.category = perfume.category;
   } else if (body.perfumeId === null || body.perfumeId === '') {
-    cols.perfume_id = null;
+    cols.perfumeId = null;
   }
 
   if (body.brand !== undefined) cols.brand = requireText(body.brand, '브랜드(brand)', 50);
@@ -94,9 +77,9 @@ async function bodyToColumns(body, isCreate) {
     }
   }
 
-  if (isCreate || body.volumeMl !== undefined) cols.volume_ml = toInt(body.volumeMl, '용량(volumeMl)', { min: 1, max: 1000 });
+  if (isCreate || body.volumeMl !== undefined) cols.volumeMl = toInt(body.volumeMl, '용량(volumeMl)', { min: 1, max: 1000 });
   if (isCreate || body.remainPercent !== undefined) {
-    cols.remain_percent = toInt(body.remainPercent, '잔량(remainPercent)', { min: 1, max: 100 });
+    cols.remainPercent = toInt(body.remainPercent, '잔량(remainPercent)', { min: 1, max: 100 });
   }
   if (isCreate || body.price !== undefined) cols.price = toInt(body.price, '가격(price)', { min: 0, max: 100000000 });
 
@@ -109,29 +92,29 @@ async function bodyToColumns(body, isCreate) {
   return cols;
 }
 
-// 목록: GET /api/market?brand=&category=&minPrice=&maxPrice=&status=&sort=latest|priceAsc|priceDesc&page=&limit=
+/**
+ * [핵심 API 1] 중고 판매글 목록 조회 (다중 필터링, 정렬 및 페이징)
+ * - Method / Path: GET /api/market
+ * - Query Params: brand, category, status(판매중/예약중/판매완료), minPrice, maxPrice, sort, page, limit
+ * - 핵심 로직: 빈 문자열 가격 쿼리 방어 로직 적용, Sequelize include로 거래(order) 진행 상태를 함께 조회
+ */
 router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { brand, category, status, sort = 'latest' } = req.query;
     const { page, limit, offset } = parsePaging(req.query, 10, 50);
 
-    const where = [];
-    const params = [];
-    if (brand) {
-      where.push('m.brand = ?');
-      params.push(brand);
-    }
+    const where = {};
+    if (brand) where.brand = brand;
     if (category) {
       if (!CATEGORIES.includes(category)) throw new HttpError(400, `category는 ${CATEGORIES.join(', ')} 중 하나여야 합니다.`);
-      where.push('m.category = ?');
-      params.push(category);
+      where.category = category;
     }
     if (status) {
       if (!MARKET_STATUS.includes(status)) throw new HttpError(400, `status는 ${MARKET_STATUS.join(', ')} 중 하나여야 합니다.`);
-      where.push('m.status = ?');
-      params.push(status);
+      where.status = status;
     }
+
     const minPrice =
       req.query.minPrice !== undefined && req.query.minPrice !== '' ? toInt(req.query.minPrice, 'minPrice', { min: 0 }) : null;
     const maxPrice =
@@ -139,100 +122,141 @@ router.get(
     if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
       throw new HttpError(400, 'minPrice는 maxPrice보다 클 수 없습니다.');
     }
-    if (minPrice !== null) {
-      where.push('m.price >= ?');
-      params.push(minPrice);
-    }
-    if (maxPrice !== null) {
-      where.push('m.price <= ?');
-      params.push(maxPrice);
+    if (minPrice !== null && maxPrice !== null) {
+      where.price = { [Op.between]: [minPrice, maxPrice] };
+    } else if (minPrice !== null) {
+      where.price = { [Op.gte]: minPrice };
+    } else if (maxPrice !== null) {
+      where.price = { [Op.lte]: maxPrice };
     }
 
-    const orderBy = {
-      latest: 'm.created_at DESC, m.id DESC',
-      priceAsc: 'm.price ASC, m.id DESC',
-      priceDesc: 'm.price DESC, m.id DESC',
-    }[sort];
-    if (!orderBy) throw new HttpError(400, 'sort는 latest, priceAsc, priceDesc 중 하나여야 합니다.');
+    const orderMap = {
+      latest: [['createdAt', 'DESC'], ['id', 'DESC']],
+      priceAsc: [['price', 'ASC'], ['id', 'DESC']],
+      priceDesc: [['price', 'DESC'], ['id', 'DESC']],
+    };
+    const order = orderMap[sort];
+    if (!order) throw new HttpError(400, 'sort는 latest, priceAsc, priceDesc 중 하나여야 합니다.');
 
-    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM market_posts m ${whereSql}`, params);
-    const [rows] = await pool.query(`${SELECT_POST} ${whereSql} ORDER BY ${orderBy} LIMIT ? OFFSET ?`, [
-      ...params,
+    const { count: total, rows: posts } = await MarketPost.findAndCountAll({
+      where,
+      order,
       limit,
       offset,
-    ]);
-    ok(res, rows.map(toPost), 200, { pagination: pagination(page, limit, total) });
+      include: postIncludes,
+      distinct: true,
+    });
+
+    ok(res, posts, 200, { pagination: pagination(page, limit, total) });
   })
 );
 
-// 내 판매글: GET /api/market/my
+/**
+ * [기능 API] 내 판매글 목록 조회
+ * - Method / Path: GET /api/market/my
+ * - Auth: 로그인 필수
+ * - 핵심 로직: 로그인한 사용자가 등록한 중고 판매글과 각각의 거래(order) 진행 상태를 최신순으로 조회
+ */
 router.get(
   '/my',
   auth,
   asyncHandler(async (req, res) => {
-    const [rows] = await pool.query(`${SELECT_POST} WHERE m.user_id = ? ORDER BY m.created_at DESC, m.id DESC`, [
-      req.user.id,
-    ]);
-    ok(res, rows.map(toPost));
+    const posts = await MarketPost.findAll({
+      where: { userId: req.user.id },
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
+      include: postIncludes,
+    });
+    ok(res, posts);
   })
 );
 
-// 상세: GET /api/market/:id
+/**
+ * [기능 API] 판매글 단건 상세 조회
+ * - Method / Path: GET /api/market/:id
+ * - 핵심 로직: 판매글 정보, 판매자 닉네임, 잔량/가격, 연결된 향수 및 현재 거래 진행 상태(order) 반환
+ */
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    ok(res, toPost(await findPost(req.params.id)));
+    const post = await findPost(req.params.id);
+    ok(res, post);
   })
 );
 
-// ★ 등록: POST /api/market  { title, perfumeId?, brand?, category?, volumeMl, remainPercent, price, content? }
+/**
+ * [핵심 API 2] 중고 판매글 등록
+ * - Method / Path: POST /api/market
+ * - Request Body: { title, perfumeId?, brand, category?, volumeMl, remainPercent, price, content? }
+ * - 핵심 로직: 필수 항목 유효성 검사 및 향수(perfumeId) 선택 시 브랜드/계열 자동 매핑
+ */
 router.post(
   '/',
   auth,
   asyncHandler(async (req, res) => {
     const cols = await bodyToColumns(req.body, true);
-    const [result] = await pool.query('INSERT INTO market_posts SET ?', [{ ...cols, user_id: req.user.id }]);
-    ok(res, toPost(await findPost(result.insertId)), 201);
+    const post = await MarketPost.create({ ...cols, userId: req.user.id });
+    const created = await findPost(post.id);
+    ok(res, created, 201);
   })
 );
 
-// 수정: PUT /api/market/:id
+/**
+ * [기능 API] 판매글 수정
+ * - Method / Path: PUT /api/market/:id
+ * - Auth: 로그인 필수 (작성자 본인만)
+ * - Request Body: 수정할 필드들
+ * - 핵심 로직: 본인 글 검증, 구매 신청이 들어온 글은 수정 차단(409), category를 null로 비우는 수정도 완벽 지원
+ */
 router.put(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    checkNoOrder(await findOwnPost(req.params.id, req.user.id));
+    const post = await findOwnPost(req.params.id, req.user.id);
+    checkNoOrder(post);
     if (req.body.status !== undefined) {
       throw new HttpError(400, '거래 상태는 PATCH /api/market/:id/status로 변경해 주세요.');
     }
     const cols = await bodyToColumns(req.body, false);
     if (Object.keys(cols).length === 0) throw new HttpError(400, '수정할 항목을 입력해 주세요.');
-    await pool.query('UPDATE market_posts SET ? WHERE id = ?', [cols, req.params.id]);
-    ok(res, toPost(await findPost(req.params.id)));
+    await post.update(cols);
+    const updated = await findPost(req.params.id);
+    ok(res, updated);
   })
 );
 
-// 거래 상태 변경: PATCH /api/market/:id/status  { status }
+/**
+ * [핵심 API 3] 거래 상태 수동 변경 (판매중 / 예약중 / 판매완료)
+ * - Method / Path: PATCH /api/market/:id/status
+ * - Request Body: { status }
+ * - 핵심 로직: 본인 글만 수정 가능하며, 구매 신청(order)이 진행 중인 글은 409 Conflict로 차단
+ */
 router.patch(
   '/:id/status',
   auth,
   asyncHandler(async (req, res) => {
     const { status } = req.body;
     if (!MARKET_STATUS.includes(status)) throw new HttpError(400, `status는 ${MARKET_STATUS.join(', ')} 중 하나여야 합니다.`);
-    checkNoOrder(await findOwnPost(req.params.id, req.user.id));
-    await pool.query('UPDATE market_posts SET status = ? WHERE id = ?', [status, req.params.id]);
-    ok(res, toPost(await findPost(req.params.id)));
+    const post = await findOwnPost(req.params.id, req.user.id);
+    checkNoOrder(post);
+    await post.update({ status });
+    const updated = await findPost(req.params.id);
+    ok(res, updated);
   })
 );
 
-// 삭제: DELETE /api/market/:id
+/**
+ * [기능 API] 판매글 삭제
+ * - Method / Path: DELETE /api/market/:id
+ * - Auth: 로그인 필수 (작성자 본인만)
+ * - 핵심 로직: 본인 글 검증, 이미 구매 진행 중인 글은 삭제 차단(409), 삭제 시 연관 데이터 정리
+ */
 router.delete(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    checkNoOrder(await findOwnPost(req.params.id, req.user.id));
-    await pool.query('DELETE FROM market_posts WHERE id = ?', [req.params.id]);
+    const post = await findOwnPost(req.params.id, req.user.id);
+    checkNoOrder(post);
+    await post.destroy();
     ok(res, { id: Number(req.params.id), message: '판매글이 삭제되었습니다.' });
   })
 );

@@ -7,7 +7,8 @@
 // DELETE /me      회원 탈퇴
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const pool = require('../db/pool');
+const { Op } = require('sequelize');
+const { User } = require('../models');
 const { auth, signToken, revokeToken } = require('../middlewares/auth');
 const { HttpError, asyncHandler, ok, requireText } = require('../utils/http');
 
@@ -27,15 +28,23 @@ function checkNickname(nickname) {
   return value;
 }
 
-const toUser = (row) => ({
-  id: row.id,
-  email: row.email,
-  nickname: row.nickname,
-  role: row.role,
-  createdAt: row.created_at,
-});
+const formatUser = (user) => {
+  const u = user.toJSON ? user.toJSON() : user;
+  return {
+    id: u.id,
+    email: u.email,
+    nickname: u.nickname,
+    role: u.role,
+    createdAt: u.createdAt,
+  };
+};
 
-// 회원가입
+/**
+ * [핵심 API 1] 회원가입
+ * - Method / Path: POST /api/users/signup
+ * - Request Body: { email, password, nickname }
+ * - 핵심 로직 & 보안: 이메일 정규식 검증, 이메일/닉네임 중복 체크(409), 비밀번호 단방향 암호화(bcrypt.hash)
+ */
 router.post(
   '/signup',
   asyncHandler(async (req, res) => {
@@ -44,34 +53,43 @@ router.post(
     checkPassword(password);
     const nick = checkNickname(nickname);
 
-    const [dup] = await pool.query('SELECT email, nickname FROM users WHERE email = ? OR nickname = ?', [email, nick]);
-    if (dup.some((u) => u.email === email)) throw new HttpError(409, '이미 가입된 이메일입니다.');
-    if (dup.length > 0) throw new HttpError(409, '이미 사용 중인 닉네임입니다.');
+    const dupEmail = await User.findOne({ where: { email } });
+    if (dupEmail) throw new HttpError(409, '이미 가입된 이메일입니다.');
+
+    const dupNick = await User.findOne({ where: { nickname: nick } });
+    if (dupNick) throw new HttpError(409, '이미 사용 중인 닉네임입니다.');
 
     const hash = await bcrypt.hash(password, 10);
-    const [result] = await pool.query('INSERT INTO users (email, password, nickname) VALUES (?, ?, ?)', [email, hash, nick]);
-    const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [result.insertId]);
-    ok(res, toUser(rows[0]), 201);
+    const user = await User.create({ email, password: hash, nickname: nick });
+    ok(res, formatUser(user), 201);
   })
 );
 
-// 로그인
+/**
+ * [핵심 API 2] 로그인 (JWT 토큰 발급)
+ * - Method / Path: POST /api/users/login
+ * - Request Body: { email, password }
+ * - 핵심 로직 & 보안: bcrypt.compare로 비밀번호 일치 검증 후 고유 ID(jti)가 포함된 JWT 토큰 발급
+ */
 router.post(
   '/login',
   asyncHandler(async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) throw new HttpError(400, '이메일과 비밀번호를 입력해 주세요.');
 
-    const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
-    const user = rows[0];
+    const user = await User.findOne({ where: { email } });
     if (!user || !(await bcrypt.compare(password, user.password))) {
       throw new HttpError(401, '이메일 또는 비밀번호가 올바르지 않습니다.');
     }
-    ok(res, { token: signToken(user), user: toUser(user) });
+    ok(res, { token: signToken(user), user: formatUser(user) });
   })
 );
 
-// 로그아웃 (지금 토큰을 더 이상 쓸 수 없게 막음)
+/**
+ * [핵심 API 3] 로그아웃 (JWT 토큰 DB 영속 폐기)
+ * - Method / Path: POST /api/users/logout
+ * - 핵심 로직 & 보안: 토큰의 jti를 revoked_tokens DB 테이블에 영속 저장하여 서버가 재부팅되어도 토큰 재사용을 영구 차단
+ */
 router.post(
   '/logout',
   auth,
@@ -81,17 +99,27 @@ router.post(
   })
 );
 
-// 내 정보 조회
+/**
+ * [기능 API] 내 프로필 정보 조회
+ * - Method / Path: GET /api/users/me
+ * - Auth: 로그인 필수
+ * - 핵심 로직: 현재 토큰의 사용자 ID로 회원 정보(이메일, 닉네임, 역할, 가입일) 반환
+ */
 router.get(
   '/me',
   auth,
   asyncHandler(async (req, res) => {
-    const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
-    ok(res, toUser(rows[0]));
+    const user = await User.findByPk(req.user.id);
+    ok(res, formatUser(user));
   })
 );
 
-// 닉네임·비밀번호 수정
+/**
+ * [핵심 API 4] 내 정보 및 비밀번호 수정 (보안 강화)
+ * - Method / Path: PUT /api/users/me
+ * - Request Body: { nickname?, password?, currentPassword? }
+ * - 핵심 로직 & 보안: 비밀번호 변경 시 반드시 currentPassword를 받아 기존 비밀번호와 일치하는지 bcrypt 검증 후 새 비밀번호 반영
+ */
 router.put(
   '/me',
   auth,
@@ -101,40 +129,46 @@ router.put(
       throw new HttpError(400, '수정할 닉네임 또는 비밀번호를 입력해 주세요.');
     }
 
-    const sets = [];
-    const params = [];
+    const user = await User.findByPk(req.user.id);
+    if (!user) throw new HttpError(404, '회원을 찾을 수 없습니다.');
+
     if (nickname !== undefined) {
       const nick = checkNickname(nickname);
-      const [dup] = await pool.query('SELECT id FROM users WHERE nickname = ? AND id <> ?', [nick, req.user.id]);
-      if (dup.length > 0) throw new HttpError(409, '이미 사용 중인 닉네임입니다.');
-      sets.push('nickname = ?');
-      params.push(nick);
+      const dup = await User.findOne({
+        where: { nickname: nick, id: { [Op.ne]: req.user.id } },
+      });
+      if (dup) throw new HttpError(409, '이미 사용 중인 닉네임입니다.');
+      user.nickname = nick;
     }
+
     if (password !== undefined) {
       if (!currentPassword) {
         throw new HttpError(400, '현재 비밀번호를 입력해 주세요.');
       }
-      const [uRows] = await pool.query('SELECT password FROM users WHERE id = ?', [req.user.id]);
-      if (uRows.length === 0 || !(await bcrypt.compare(currentPassword, uRows[0].password))) {
+      if (!(await bcrypt.compare(currentPassword, user.password))) {
         throw new HttpError(400, '현재 비밀번호가 일치하지 않습니다.');
       }
       checkPassword(password);
-      sets.push('password = ?');
-      params.push(await bcrypt.hash(password, 10));
+      user.password = await bcrypt.hash(password, 10);
     }
 
-    await pool.query(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, [...params, req.user.id]);
-    const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
-    ok(res, toUser(rows[0]));
+    await user.save();
+    ok(res, formatUser(user));
   })
 );
 
-// 회원 탈퇴 (작성한 리뷰·찜·판매글도 함께 삭제됨: ON DELETE CASCADE)
+/**
+ * [기능 API] 회원 탈퇴
+ * - Method / Path: DELETE /api/users/me
+ * - Auth: 로그인 필수
+ * - 핵심 로직: 회원 삭제 시 DB 외래키 CASCADE로 작성했던 찜, 리뷰, 판매글 연쇄 삭제 및 토큰 영구 폐기
+ */
 router.delete(
   '/me',
   auth,
   asyncHandler(async (req, res) => {
-    await pool.query('DELETE FROM users WHERE id = ?', [req.user.id]);
+    const user = await User.findByPk(req.user.id);
+    if (user) await user.destroy();
     await revokeToken(req.tokenId, req.tokenExp);
     ok(res, { message: '회원 탈퇴가 완료되었습니다.' });
   })

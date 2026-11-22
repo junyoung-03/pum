@@ -10,18 +10,18 @@
 // 주의: '/featured' 같은 고정 경로는 '/:id'보다 위에 선언해야 합니다.
 //       아래에 두면 Express가 'featured'를 향수 id로 인식합니다.
 const express = require('express');
-const pool = require('../db/pool');
+const { Op, Sequelize } = require('sequelize');
+const { Perfume } = require('../models');
 const { auth, adminOnly } = require('../middlewares/auth');
 const { HttpError, asyncHandler, ok, parsePaging, pagination, toInt, requireText } = require('../utils/http');
 const { CATEGORIES, MOODS, SEASONS, PURPOSES, PRICE_LEVELS } = require('../utils/constants');
-const { toPerfume, parseJson } = require('../utils/perfume');
 
 const router = express.Router();
 
 async function findPerfume(id) {
-  const [rows] = await pool.query('SELECT * FROM perfumes WHERE id = ?', [id]);
-  if (rows.length === 0) throw new HttpError(404, '향수를 찾을 수 없습니다.');
-  return rows[0];
+  const perfume = await Perfume.findByPk(id);
+  if (!perfume) throw new HttpError(404, '향수를 찾을 수 없습니다.');
+  return perfume;
 }
 
 /**
@@ -31,34 +31,35 @@ async function findPerfume(id) {
  *   - 계절(season)이 겹치는 개수 × 0.5
  */
 function similarityScore(base, other) {
-  const baseMood = parseJson(base.mood);
-  const baseSeason = parseJson(base.season);
+  const baseMood = Array.isArray(base.mood) ? base.mood : [];
+  const baseSeason = Array.isArray(base.season) ? base.season : [];
+  const otherMood = Array.isArray(other.mood) ? other.mood : [];
+  const otherSeason = Array.isArray(other.season) ? other.season : [];
   let score = 0;
   if (other.category === base.category) score += 3;
-  score += parseJson(other.mood).filter((m) => baseMood.includes(m)).length;
-  score += parseJson(other.season).filter((s) => baseSeason.includes(s)).length * 0.5;
+  score += otherMood.filter((m) => baseMood.includes(m)).length;
+  score += otherSeason.filter((s) => baseSeason.includes(s)).length * 0.5;
   return score;
 }
 
-// 등록·수정 요청 본문 → DB 컬럼 값 (전달된 필드만)
 const ARRAY_FIELDS = {
   mood: ['mood', MOODS],
-  moodTags: ['mood_tags', null],
+  moodTags: ['moodTags', null],
   season: ['season', SEASONS],
   purpose: ['purpose', PURPOSES],
-  topNote: ['top_note', null],
-  middleNote: ['middle_note', null],
-  baseNote: ['base_note', null],
+  topNote: ['topNote', null],
+  middleNote: ['middleNote', null],
+  baseNote: ['baseNote', null],
 };
 const TEXT_FIELDS = {
   name: ['name', 100],
   brand: ['brand', 50],
-  noteFamily: ['note_family', 100],
+  noteFamily: ['noteFamily', 100],
   description: ['description', 2000],
   highlight: ['highlight', 255],
   image: ['image', 255],
   color: ['color', 20],
-  shortCopy: ['short_copy', 255],
+  shortCopy: ['shortCopy', 255],
 };
 
 function bodyToColumns(body) {
@@ -79,7 +80,7 @@ function bodyToColumns(body) {
     if (allowed && arr.some((v) => !allowed.includes(v))) {
       throw new HttpError(400, `${field} 값은 ${allowed.join(', ')} 중에서 선택해 주세요.`);
     }
-    cols[col] = JSON.stringify(arr);
+    cols[col] = arr;
   }
   if (body.category !== undefined) {
     if (!CATEGORIES.includes(body.category)) throw new HttpError(400, `category는 ${CATEGORIES.join(', ')} 중 하나여야 합니다.`);
@@ -87,104 +88,114 @@ function bodyToColumns(body) {
   }
   if (body.price !== undefined) {
     if (!PRICE_LEVELS.includes(body.price)) throw new HttpError(400, `price는 ${PRICE_LEVELS.join(', ')} 중 하나여야 합니다.`);
-    cols.price_level = body.price;
+    cols.priceLevel = body.price;
   }
   if (body.featured !== undefined) {
     if (typeof body.featured !== 'boolean') throw new HttpError(400, 'featured는 true 또는 false여야 합니다.');
-    cols.is_featured = body.featured ? 1 : 0;
+    cols.isFeatured = body.featured;
   }
   if (body.featuredOrder !== undefined) {
-    cols.featured_order = body.featuredOrder === null ? null : toInt(body.featuredOrder, 'featuredOrder', { min: 1 });
+    cols.featuredOrder = body.featuredOrder === null ? null : toInt(body.featuredOrder, 'featuredOrder', { min: 1 });
   }
   return cols;
 }
 
-// ★ 목록 조회: GET /api/perfumes?q=&category=&mood=&season=&page=&limit=
+/**
+ * [핵심 API 1] 향수 목록 조회 (다중 조건 필터링 및 페이징)
+ * - Method / Path: GET /api/perfumes
+ * - Query Params: q(검색어), category(향 계열), mood(분위기), season(계절), page(페이지), limit(개수)
+ * - 핵심 로직: Sequelize 다중 조건 및 JSON_CONTAINS를 활용한 고속 필터링
+ */
 router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { q, category, mood, season } = req.query;
     const { page, limit, offset } = parsePaging(req.query, 20, 50);
 
-    const where = [];
-    const params = [];
+    const conditions = [];
     if (q) {
-      where.push('(name LIKE ? OR brand LIKE ?)');
-      params.push(`%${q}%`, `%${q}%`);
+      conditions.push({
+        [Op.or]: [
+          { name: { [Op.like]: `%${q}%` } },
+          { brand: { [Op.like]: `%${q}%` } },
+        ],
+      });
     }
     if (category) {
       if (!CATEGORIES.includes(category)) throw new HttpError(400, `category는 ${CATEGORIES.join(', ')} 중 하나여야 합니다.`);
-      where.push('category = ?');
-      params.push(category);
+      conditions.push({ category });
     }
     if (mood) {
       if (!MOODS.includes(mood)) throw new HttpError(400, `mood는 ${MOODS.join(', ')} 중 하나여야 합니다.`);
-      where.push('JSON_CONTAINS(mood, JSON_QUOTE(?))');
-      params.push(mood);
+      conditions.push(Sequelize.where(Sequelize.fn('JSON_CONTAINS', Sequelize.col('mood'), JSON.stringify(mood)), 1));
     }
     if (season) {
       if (!SEASONS.includes(season)) throw new HttpError(400, `season은 ${SEASONS.join(', ')} 중 하나여야 합니다.`);
-      where.push('JSON_CONTAINS(season, JSON_QUOTE(?))');
-      params.push(season);
+      conditions.push(Sequelize.where(Sequelize.fn('JSON_CONTAINS', Sequelize.col('season'), JSON.stringify(season)), 1));
     }
-    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM perfumes ${whereSql}`, params);
-    const [rows] = await pool.query(
-      `SELECT * FROM perfumes ${whereSql} ORDER BY sort_order ASC, id ASC LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
-    ok(res, rows.map(toPerfume), 200, { pagination: pagination(page, limit, total) });
+    const where = conditions.length > 0 ? { [Op.and]: conditions } : {};
+
+    const { count: total, rows: perfumes } = await Perfume.findAndCountAll({
+      where,
+      order: [['sortOrder', 'ASC'], ['id', 'ASC']],
+      limit,
+      offset,
+    });
+
+    ok(res, perfumes, 200, { pagination: pagination(page, limit, total) });
   })
 );
 
-// 대표 향수 3종: GET /api/perfumes/featured
+/**
+ * [핵심 API 2] 홈 화면 대표 향수 3종 조회 (Featured Showcase)
+ * - Method / Path: GET /api/perfumes/featured
+ * - 핵심 로직: 관리자가 지정한 대표 향수(`isFeatured = true`) 중 `featuredOrder` 순으로 상위 3개를 추출하여 메인 홈 배너에 전달
+ */
 router.get(
   '/featured',
   asyncHandler(async (req, res) => {
-    const [rows] = await pool.query(
-      `SELECT id, brand, name, short_copy, image, color, featured_order
-         FROM perfumes
-        WHERE is_featured = 1
-        ORDER BY featured_order ASC
-        LIMIT 3`
-    );
-    // 대표 향수가 없어도 오류가 아니므로 빈 배열 + 200
-    ok(
-      res,
-      rows.map((r) => ({
-        id: r.id,
-        brand: r.brand,
-        name: r.name,
-        shortCopy: r.short_copy,
-        image: r.image,
-        color: r.color,
-        featuredOrder: r.featured_order,
-      }))
-    );
+    const rows = await Perfume.findAll({
+      attributes: ['id', 'brand', 'name', 'shortCopy', 'image', 'color', 'featuredOrder'],
+      where: { isFeatured: true },
+      order: [['featuredOrder', 'ASC']],
+      limit: 3,
+    });
+    ok(res, rows);
   })
 );
 
-// ★ 상세 조회: GET /api/perfumes/:id
+/**
+ * [핵심 API 3] 향수 단건 상세 조회
+ * - Method / Path: GET /api/perfumes/:id
+ * - 핵심 로직: id로 단건 조회 후 Sequelize 모델 인스턴스 반환 (자동 camelCase 및 JSON 파싱 완료)
+ */
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const row = await findPerfume(req.params.id);
-    ok(res, toPerfume(row));
+    const perfume = await findPerfume(req.params.id);
+    ok(res, perfume);
   })
 );
 
-// 비슷한 향수: GET /api/perfumes/:id/similar?limit=3
+/**
+ * [핵심 API 4] 비슷한 향수 추천 알고리즘 (Similarity Recommendation)
+ * - Method / Path: GET /api/perfumes/:id/similar?limit=3
+ * - 핵심 로직:
+ *   1) 기준 향수와 타 향수들을 비교하여 가중치 유사도 점수 산출
+ *      (동일 향 계열 +3점, 무드 일치 개수 × 1점, 계절 일치 개수 × 0.5점)
+ *   2) 유사도 점수 내림차순으로 상위 N개 추천
+ */
 router.get(
   '/:id/similar',
   asyncHandler(async (req, res) => {
     const limit = req.query.limit === undefined ? 3 : toInt(req.query.limit, 'limit', { min: 1, max: 10 });
 
-    // 1) 기준 향수 조회 (없으면 404)
     const base = await findPerfume(req.params.id);
-    // 2) 기준 향수를 뺀 나머지 조회
-    const [others] = await pool.query('SELECT * FROM perfumes WHERE id <> ?', [base.id]);
-    // 3) 점수 계산 → 4) 점수 내림차순, 동점이면 id 오름차순 → limit개
+    const others = await Perfume.findAll({
+      where: { id: { [Op.ne]: base.id } },
+    });
+
     const result = others
       .map((p) => ({
         id: p.id,
@@ -201,7 +212,13 @@ router.get(
   })
 );
 
-// 향수 등록 (관리자): POST /api/perfumes
+/**
+ * [관리자 API] 신규 향수 등록
+ * - Method / Path: POST /api/perfumes
+ * - Auth: 관리자 전용 (adminOnly)
+ * - Request Body: { id, name, brand, category, price, mood, season, ... }
+ * - 핵심 로직: 영문 slug 형태 id 유효성 검사, 중복 id 체크(409), Sequelize create로 저장
+ */
 router.post(
   '/',
   auth,
@@ -216,44 +233,56 @@ router.post(
     if (req.body.category === undefined) throw new HttpError(400, 'category를 입력해 주세요.');
 
     const cols = bodyToColumns(req.body);
-    // 배열 컬럼은 NOT NULL이므로 값이 없으면 빈 배열
-    for (const [col] of Object.values(ARRAY_FIELDS)) if (cols[col] === undefined) cols[col] = '[]';
+    for (const field of Object.keys(ARRAY_FIELDS)) {
+      if (cols[field] === undefined) cols[field] = [];
+    }
 
-    const [exists] = await pool.query('SELECT id FROM perfumes WHERE id = ?', [id]);
-    if (exists.length > 0) throw new HttpError(409, '이미 존재하는 향수 id입니다.');
+    const exists = await Perfume.findByPk(id, { attributes: ['id'] });
+    if (exists) throw new HttpError(409, '이미 존재하는 향수 id입니다.');
 
-    const [[{ nextOrder }]] = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 AS nextOrder FROM perfumes');
-    const data = { id, ...cols, sort_order: nextOrder };
-    await pool.query('INSERT INTO perfumes SET ?', [data]);
+    const maxOrder = await Perfume.max('sortOrder');
+    const nextOrder = (maxOrder || 0) + 1;
 
-    ok(res, toPerfume(await findPerfume(id)), 201);
+    const created = await Perfume.create({ id, ...cols, sortOrder: nextOrder });
+    ok(res, created, 201);
   })
 );
 
-// 향수 수정 (관리자): PUT /api/perfumes/:id
+/**
+ * [관리자 API] 향수 정보 수정
+ * - Method / Path: PUT /api/perfumes/:id
+ * - Auth: 관리자 전용 (adminOnly)
+ * - Request Body: 수정할 필드들 (부분 업데이트 지원)
+ * - 핵심 로직: 전달된 필드만 추출하여 Sequelize update 실행
+ */
 router.put(
   '/:id',
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    await findPerfume(req.params.id);
+    const perfume = await findPerfume(req.params.id);
     const cols = bodyToColumns(req.body);
     if (Object.keys(cols).length === 0) throw new HttpError(400, '수정할 항목을 입력해 주세요.');
     if (cols.name === '' || cols.brand === '') throw new HttpError(400, 'name과 brand는 비워 둘 수 없습니다.');
 
-    await pool.query('UPDATE perfumes SET ? WHERE id = ?', [cols, req.params.id]);
-    ok(res, toPerfume(await findPerfume(req.params.id)));
+    await perfume.update(cols);
+    ok(res, perfume);
   })
 );
 
-// 향수 삭제 (관리자): DELETE /api/perfumes/:id
+/**
+ * [관리자 API] 향수 삭제
+ * - Method / Path: DELETE /api/perfumes/:id
+ * - Auth: 관리자 전용 (adminOnly)
+ * - 핵심 로직: 향수 삭제 시 DB 외래키 CASCADE 설정에 의해 연관된 리뷰와 찜 데이터도 자동 연쇄 삭제
+ */
 router.delete(
   '/:id',
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    await findPerfume(req.params.id);
-    await pool.query('DELETE FROM perfumes WHERE id = ?', [req.params.id]);
+    const perfume = await findPerfume(req.params.id);
+    await perfume.destroy();
     ok(res, { id: req.params.id, message: '향수가 삭제되었습니다.' });
   })
 );
