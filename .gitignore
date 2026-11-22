@@ -8,3 +8,4 @@ pum/
 vite.config.js
 vite.config.d.ts
 *.tsbuildinfo
+scratch/

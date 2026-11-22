@@ -4,12 +4,12 @@ const { app, request, login, bearer } = require('./helpers');
 
 describe('향수 /api/perfumes', () => {
   describe('★ GET / 목록 조회', () => {
-    test('200 + 전체 8종 + 페이지 정보', async () => {
+    test('200 + 전체 11종 + 페이지 정보', async () => {
       const res = await request(app).get('/api/perfumes');
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data).toHaveLength(8);
-      expect(res.body.pagination).toMatchObject({ page: 1, total: 8 });
+      expect(res.body.data).toHaveLength(11);
+      expect(res.body.pagination).toMatchObject({ page: 1, total: 11 });
     });
 
     test('category 필터: Woody만 조회', async () => {
@@ -67,13 +67,13 @@ describe('향수 /api/perfumes', () => {
   });
 
   describe('GET /:id/similar 비슷한 향수', () => {
-    test('Santal 33 기준 → Tom Ford(7점), Dior(3점), MFK(3점)', async () => {
+    test('Santal 33 기준 → Tom Ford(7점), Santal Cream(6점), Aesop(5.5점)', async () => {
       const res = await request(app).get('/api/perfumes/le-labo-santal-33/similar');
       expect(res.status).toBe(200);
       expect(res.body.data.map((p) => [p.id, p.similarity])).toEqual([
         ['tom-ford-oud-wood', 7],
-        ['dior-sauvage-edp', 3],
-        ['mfk-baccarat-rouge-540', 3],
+        ['nonfiction-santal-cream', 6],
+        ['aesop-virere-edp', 5.5],
       ]);
     });
 
