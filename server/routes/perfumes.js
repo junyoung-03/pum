@@ -10,37 +10,12 @@
 // 주의: '/featured' 같은 고정 경로는 '/:id'보다 위에 선언해야 합니다.
 //       아래에 두면 Express가 'featured'를 향수 id로 인식합니다.
 const express = require('express');
-const { Op, Sequelize } = require('sequelize');
 const { Perfume } = require('../models');
 const { auth, adminOnly } = require('../middlewares/auth');
 const { HttpError, asyncHandler, ok, parsePaging, pagination, toInt, requireText } = require('../utils/http');
 const { CATEGORIES, MOODS, SEASONS, PURPOSES, PRICE_LEVELS } = require('../utils/constants');
 
 const router = express.Router();
-
-async function findPerfume(id) {
-  const perfume = await Perfume.findByPk(id);
-  if (!perfume) throw new HttpError(404, '향수를 찾을 수 없습니다.');
-  return perfume;
-}
-
-/**
- * 유사도 점수 (프론트 DetailPage.tsx의 getSimilarPerfumes와 같은 기준)
- *   - 향 계열(category)이 같으면 +3
- *   - 무드(mood)가 겹치는 개수 × 1
- *   - 계절(season)이 겹치는 개수 × 0.5
- */
-function similarityScore(base, other) {
-  const baseMood = Array.isArray(base.mood) ? base.mood : [];
-  const baseSeason = Array.isArray(base.season) ? base.season : [];
-  const otherMood = Array.isArray(other.mood) ? other.mood : [];
-  const otherSeason = Array.isArray(other.season) ? other.season : [];
-  let score = 0;
-  if (other.category === base.category) score += 3;
-  score += otherMood.filter((m) => baseMood.includes(m)).length;
-  score += otherSeason.filter((s) => baseSeason.includes(s)).length * 0.5;
-  return score;
-}
 
 const ARRAY_FIELDS = {
   mood: ['mood', MOODS],
@@ -112,36 +87,10 @@ router.get(
     const { q, category, mood, season } = req.query;
     const { page, limit, offset } = parsePaging(req.query, 20, 50);
 
-    const conditions = [];
-    if (q) {
-      conditions.push({
-        [Op.or]: [
-          { name: { [Op.like]: `%${q}%` } },
-          { brand: { [Op.like]: `%${q}%` } },
-        ],
-      });
+    for (const [key, allowed] of Object.entries({ category: CATEGORIES, mood: MOODS, season: SEASONS })) {
+      if (req.query[key] && !allowed.includes(req.query[key])) throw new HttpError(400, `${key}는 ${allowed.join(', ')} 중 하나여야 합니다.`);
     }
-    if (category) {
-      if (!CATEGORIES.includes(category)) throw new HttpError(400, `category는 ${CATEGORIES.join(', ')} 중 하나여야 합니다.`);
-      conditions.push({ category });
-    }
-    if (mood) {
-      if (!MOODS.includes(mood)) throw new HttpError(400, `mood는 ${MOODS.join(', ')} 중 하나여야 합니다.`);
-      conditions.push(Sequelize.where(Sequelize.fn('JSON_CONTAINS', Sequelize.col('mood'), JSON.stringify(mood)), 1));
-    }
-    if (season) {
-      if (!SEASONS.includes(season)) throw new HttpError(400, `season은 ${SEASONS.join(', ')} 중 하나여야 합니다.`);
-      conditions.push(Sequelize.where(Sequelize.fn('JSON_CONTAINS', Sequelize.col('season'), JSON.stringify(season)), 1));
-    }
-
-    const where = conditions.length > 0 ? { [Op.and]: conditions } : {};
-
-    const { count: total, rows: perfumes } = await Perfume.findAndCountAll({
-      where,
-      order: [['sortOrder', 'ASC'], ['id', 'ASC']],
-      limit,
-      offset,
-    });
+    const { count: total, rows: perfumes } = await Perfume.listPage({ q, category, mood, season, limit, offset });
 
     ok(res, perfumes, 200, { pagination: pagination(page, limit, total) });
   })
@@ -155,12 +104,7 @@ router.get(
 router.get(
   '/featured',
   asyncHandler(async (req, res) => {
-    const rows = await Perfume.findAll({
-      attributes: ['id', 'brand', 'name', 'shortCopy', 'image', 'color', 'featuredOrder'],
-      where: { isFeatured: true },
-      order: [['featuredOrder', 'ASC']],
-      limit: 3,
-    });
+    const rows = await Perfume.listFeatured();
     ok(res, rows);
   })
 );
@@ -173,7 +117,7 @@ router.get(
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const perfume = await findPerfume(req.params.id);
+    const perfume = await Perfume.findDetail(req.params.id);
     ok(res, perfume);
   })
 );
@@ -191,24 +135,8 @@ router.get(
   asyncHandler(async (req, res) => {
     const limit = req.query.limit === undefined ? 3 : toInt(req.query.limit, 'limit', { min: 1, max: 10 });
 
-    const base = await findPerfume(req.params.id);
-    const others = await Perfume.findAll({
-      where: { id: { [Op.ne]: base.id } },
-    });
-
-    const result = others
-      .map((p) => ({
-        id: p.id,
-        brand: p.brand,
-        name: p.name,
-        image: p.image,
-        category: p.category,
-        similarity: similarityScore(base, p),
-      }))
-      .sort((a, b) => b.similarity - a.similarity || a.id.localeCompare(b.id))
-      .slice(0, limit);
-
-    ok(res, result, 200, { base: { id: base.id, brand: base.brand, name: base.name } });
+    const { result, base } = await Perfume.findSimilar(req.params.id, limit);
+    ok(res, result, 200, { base });
   })
 );
 
@@ -237,13 +165,7 @@ router.post(
       if (cols[field] === undefined) cols[field] = [];
     }
 
-    const exists = await Perfume.findByPk(id, { attributes: ['id'] });
-    if (exists) throw new HttpError(409, '이미 존재하는 향수 id입니다.');
-
-    const maxOrder = await Perfume.max('sortOrder');
-    const nextOrder = (maxOrder || 0) + 1;
-
-    const created = await Perfume.create({ id, ...cols, sortOrder: nextOrder });
+    const created = await Perfume.createPerfume(id, cols);
     ok(res, created, 201);
   })
 );
@@ -260,12 +182,11 @@ router.put(
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    const perfume = await findPerfume(req.params.id);
     const cols = bodyToColumns(req.body);
     if (Object.keys(cols).length === 0) throw new HttpError(400, '수정할 항목을 입력해 주세요.');
     if (cols.name === '' || cols.brand === '') throw new HttpError(400, 'name과 brand는 비워 둘 수 없습니다.');
 
-    await perfume.update(cols);
+    const perfume = await Perfume.changePerfume(req.params.id, cols);
     ok(res, perfume);
   })
 );
@@ -281,8 +202,7 @@ router.delete(
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    const perfume = await findPerfume(req.params.id);
-    await perfume.destroy();
+    await Perfume.removePerfume(req.params.id);
     ok(res, { id: req.params.id, message: '향수가 삭제되었습니다.' });
   })
 );

@@ -8,7 +8,8 @@ module.exports = class RecommendQuestion extends Sequelize.Model {
           type: Sequelize.INTEGER,
           primaryKey: true,
         },
-        qKey: {
+        key: {
+          field: 'q_key',
           type: Sequelize.STRING(20),
           allowNull: false,
           unique: true,
@@ -43,6 +44,10 @@ module.exports = class RecommendQuestion extends Sequelize.Model {
         collate: 'utf8mb4_unicode_ci',
       }
     );
+  }
+
+  static listQuestions() {
+    return this.findAll({ attributes: ['id', 'key', 'title', 'subtitle', 'options'], order: [['sortOrder', 'ASC']] });
   }
 
   static associate() {}

@@ -1,4 +1,5 @@
 const Sequelize = require('sequelize');
+const { HttpError } = require('../utils/http');
 
 module.exports = class Perfume extends Sequelize.Model {
   static init(sequelize) {
@@ -127,6 +128,74 @@ module.exports = class Perfume extends Sequelize.Model {
         collate: 'utf8mb4_unicode_ci',
       }
     );
+  }
+
+  static async findDetail(id) {
+    const perfume = await this.findByPk(id);
+    if (!perfume) throw new HttpError(404, '향수를 찾을 수 없습니다.');
+    return perfume;
+  }
+
+  static listPage({ q, category, mood, season, limit, offset }) {
+    const { Op } = Sequelize;
+    const conditions = [];
+    if (q) conditions.push({ [Op.or]: [{ name: { [Op.like]: `%${q}%` } }, { brand: { [Op.like]: `%${q}%` } }] });
+    if (category) conditions.push({ category });
+    for (const [field, value] of Object.entries({ mood, season })) {
+      if (value) conditions.push(Sequelize.where(Sequelize.fn('JSON_CONTAINS', Sequelize.col(field), JSON.stringify(value)), 1));
+    }
+    return this.findAndCountAll({ where: conditions.length ? { [Op.and]: conditions } : {},
+      order: [['sortOrder', 'ASC'], ['id', 'ASC']], limit, offset });
+  }
+
+  static listFeatured() {
+    return this.findAll({ attributes: ['id', 'brand', 'name', 'shortCopy', 'image', 'color', 'featuredOrder'],
+      where: { isFeatured: true }, order: [['featuredOrder', 'ASC']], limit: 3 });
+  }
+
+  static similarityScore(base, other) {
+    const baseMood = Array.isArray(base.mood) ? base.mood : [];
+    const baseSeason = Array.isArray(base.season) ? base.season : [];
+    const otherMood = Array.isArray(other.mood) ? other.mood : [];
+    const otherSeason = Array.isArray(other.season) ? other.season : [];
+    let score = 0;
+    if (other.category === base.category) score += 3;
+    score += otherMood.filter((m) => baseMood.includes(m)).length;
+    score += otherSeason.filter((s) => baseSeason.includes(s)).length * 0.5;
+    return score;
+  }
+
+  static async findSimilar(id, limit) {
+    const base = await this.findDetail(id);
+    const others = await this.findAll({
+      attributes: ['id', 'brand', 'name', 'image', 'category', 'mood', 'season'],
+      where: { id: { [Sequelize.Op.ne]: base.id } },
+    });
+    const result = others.map((perfume) => {
+      const data = perfume.toJSON();
+      data.similarity = this.similarityScore(base, perfume);
+      delete data.mood;
+      delete data.season;
+      return data;
+    }).sort((a, b) => b.similarity - a.similarity || a.id.localeCompare(b.id)).slice(0, limit);
+    return { result, base: { id: base.id, brand: base.brand, name: base.name } };
+  }
+
+  static async createPerfume(id, values) {
+    if (await this.findByPk(id, { attributes: ['id'] })) throw new HttpError(409, '이미 존재하는 향수 id입니다.');
+    const maxOrder = await this.max('sortOrder');
+    return this.create({ id, ...values, sortOrder: (maxOrder || 0) + 1 });
+  }
+
+  static async changePerfume(id, values) {
+    const perfume = await this.findDetail(id);
+    await perfume.update(values);
+    return perfume;
+  }
+
+  static async removePerfume(id) {
+    const perfume = await this.findDetail(id);
+    await perfume.destroy();
   }
 
   static associate(db) {

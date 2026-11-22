@@ -8,17 +8,11 @@
 //
 // 프론트는 토글(toggleFavorite) 방식이지만, 서버는 추가와 해제를 나눠서 처리합니다.
 const express = require('express');
-const { Sequelize } = require('sequelize');
-const { Favorite, Perfume } = require('../models');
+const { Favorite } = require('../models');
 const { auth } = require('../middlewares/auth');
-const { HttpError, asyncHandler, ok, toInt } = require('../utils/http');
+const { asyncHandler, ok, toInt } = require('../utils/http');
 
 const router = express.Router();
-
-async function ensurePerfume(perfumeId) {
-  const perfume = await Perfume.findByPk(perfumeId, { attributes: ['id'] });
-  if (!perfume) throw new HttpError(404, '향수를 찾을 수 없습니다.');
-}
 
 /**
  * [핵심 API 1] 실시간 인기 찜 랭킹 조회 (Most Loved TOP N)
@@ -29,31 +23,7 @@ router.get(
   '/ranking',
   asyncHandler(async (req, res) => {
     const limit = req.query.limit === undefined ? 5 : toInt(req.query.limit, 'limit', { min: 1, max: 20 });
-    const rows = await Favorite.findAll({
-      attributes: [
-        [Sequelize.fn('COUNT', Sequelize.col('Favorite.id')), 'favoriteCount'],
-      ],
-      include: [
-        { model: Perfume, as: 'perfume', attributes: ['id', 'brand', 'name', 'image'] },
-      ],
-      group: ['Favorite.perfume_id', 'perfume.id', 'perfume.brand', 'perfume.name', 'perfume.image'],
-      order: [[Sequelize.literal('favoriteCount'), 'DESC'], [Sequelize.col('perfume.id'), 'ASC']],
-      limit,
-      raw: true,
-      nest: true,
-    });
-
-    ok(
-      res,
-      rows.map((r, i) => ({
-        rank: i + 1,
-        id: r.perfume.id,
-        brand: r.perfume.brand,
-        name: r.perfume.name,
-        image: r.perfume.image,
-        favoriteCount: Number(r.favoriteCount),
-      }))
-    );
+    ok(res, await Favorite.ranking(limit));
   })
 );
 
@@ -62,18 +32,7 @@ router.get(
   '/',
   auth,
   asyncHandler(async (req, res) => {
-    const favorites = await Favorite.findAll({
-      where: { userId: req.user.id },
-      include: [{ model: Perfume, as: 'perfume' }],
-      order: [['createdAt', 'DESC'], ['id', 'DESC']],
-    });
-    ok(
-      res,
-      favorites.map((f) => {
-        const p = f.perfume ? f.perfume.toJSON() : {};
-        return { ...p, favoritedAt: f.createdAt };
-      })
-    );
+    ok(res, await Favorite.listOwn(req.user.id));
   })
 );
 
@@ -83,12 +42,8 @@ router.get(
   auth,
   asyncHandler(async (req, res) => {
     const { perfumeId } = req.params;
-    await ensurePerfume(perfumeId);
-    const favorite = await Favorite.findOne({
-      where: { userId: req.user.id, perfumeId },
-      attributes: ['id'],
-    });
-    ok(res, { perfumeId, isFavorite: Boolean(favorite) });
+    const isFavorite = await Favorite.check(req.user.id, perfumeId);
+    ok(res, { perfumeId, isFavorite });
   })
 );
 
@@ -102,15 +57,7 @@ router.post(
   auth,
   asyncHandler(async (req, res) => {
     const { perfumeId } = req.params;
-    await ensurePerfume(perfumeId);
-    try {
-      await Favorite.create({ userId: req.user.id, perfumeId });
-    } catch (err) {
-      if (err.name === 'SequelizeUniqueConstraintError' || err.code === 'ER_DUP_ENTRY') {
-        throw new HttpError(409, '이미 찜한 향수입니다.');
-      }
-      throw err;
-    }
+    await Favorite.add(req.user.id, perfumeId);
     ok(res, { perfumeId, isFavorite: true }, 201);
   })
 );
@@ -125,10 +72,7 @@ router.delete(
   auth,
   asyncHandler(async (req, res) => {
     const { perfumeId } = req.params;
-    const deleted = await Favorite.destroy({
-      where: { userId: req.user.id, perfumeId },
-    });
-    if (deleted === 0) throw new HttpError(404, '찜한 향수가 아닙니다.');
+    await Favorite.remove(req.user.id, perfumeId);
     ok(res, { perfumeId, isFavorite: false });
   })
 );
@@ -138,9 +82,7 @@ router.delete(
   '/',
   auth,
   asyncHandler(async (req, res) => {
-    const deletedCount = await Favorite.destroy({
-      where: { userId: req.user.id },
-    });
+    const deletedCount = await Favorite.clearOwn(req.user.id);
     ok(res, { deletedCount });
   })
 );

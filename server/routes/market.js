@@ -12,61 +12,31 @@
 //
 // 주의: '/my'는 '/:id'보다 위에 선언해야 합니다.
 const express = require('express');
-const { Op } = require('sequelize');
-const { MarketPost, User, Order, Perfume } = require('../models');
+const { MarketPost } = require('../models');
 const { auth } = require('../middlewares/auth');
 const { HttpError, asyncHandler, ok, parsePaging, pagination, toInt, requireText } = require('../utils/http');
 const { CATEGORIES, MARKET_STATUS } = require('../utils/constants');
 
 const router = express.Router();
 
-// Sequelize include 설정: 연관된 seller(User) 및 order(Order) 자동 조인
-const postIncludes = [
-  { model: User, as: 'seller', attributes: ['id', 'nickname'] },
-  { model: Order, as: 'order', attributes: ['id', 'stage', 'buyerId'] },
-];
-
-async function findPost(id) {
-  const post = await MarketPost.findByPk(id, { include: postIncludes });
-  if (!post) throw new HttpError(404, '판매글을 찾을 수 없습니다.');
-  return post;
-}
-
-async function findOwnPost(id, userId) {
-  const post = await findPost(id);
-  if (post.userId !== userId) throw new HttpError(403, '본인이 작성한 판매글만 수정·삭제할 수 있습니다.');
-  return post;
-}
-
-// 구매 신청이 들어온 판매글은 수정·상태 변경·삭제 불가 (409)
-function checkNoOrder(post) {
-  if (post.order) {
-    throw new HttpError(409, '구매 신청이 들어온 판매글은 수정·삭제하거나 상태를 직접 바꿀 수 없습니다. (거래 단계에 따라 자동 변경)');
-  }
-}
-
 /**
  * 등록·수정 본문 검사 → Sequelize Model 필드
  * isCreate가 true이면 필수 값(title, volumeMl, remainPercent, price)을 확인
- * perfumeId를 넣으면 brand·category를 향수 정보에서 자동으로 채움
+ * perfumeId의 존재 확인 및 brand·category 기본값 처리는 모델에서 수행
  */
-async function bodyToColumns(body, isCreate) {
+function bodyToColumns(body, isCreate) {
   const cols = {};
 
   if (isCreate || body.title !== undefined) cols.title = requireText(body.title, '제목(title)', 100);
 
   if (body.perfumeId !== undefined && body.perfumeId !== null && body.perfumeId !== '') {
-    const perfume = await Perfume.findByPk(body.perfumeId, { attributes: ['id', 'brand', 'category'] });
-    if (!perfume) throw new HttpError(404, '연결할 향수를 찾을 수 없습니다.');
-    cols.perfumeId = perfume.id;
-    if (body.brand === undefined) cols.brand = perfume.brand;
-    if (body.category === undefined) cols.category = perfume.category;
+    cols.perfumeId = body.perfumeId;
   } else if (body.perfumeId === null || body.perfumeId === '') {
     cols.perfumeId = null;
   }
 
   if (body.brand !== undefined) cols.brand = requireText(body.brand, '브랜드(brand)', 50);
-  if (isCreate && !cols.brand) throw new HttpError(400, '브랜드(brand)를 입력하거나 perfumeId를 선택해 주세요.');
+  if (isCreate && !cols.brand && !cols.perfumeId) throw new HttpError(400, '브랜드(brand)를 입력하거나 perfumeId를 선택해 주세요.');
 
   if (body.category !== undefined) {
     if (body.category === null || body.category === '') {
@@ -104,15 +74,11 @@ router.get(
     const { brand, category, status, sort = 'latest' } = req.query;
     const { page, limit, offset } = parsePaging(req.query, 10, 50);
 
-    const where = {};
-    if (brand) where.brand = brand;
     if (category) {
       if (!CATEGORIES.includes(category)) throw new HttpError(400, `category는 ${CATEGORIES.join(', ')} 중 하나여야 합니다.`);
-      where.category = category;
     }
     if (status) {
       if (!MARKET_STATUS.includes(status)) throw new HttpError(400, `status는 ${MARKET_STATUS.join(', ')} 중 하나여야 합니다.`);
-      where.status = status;
     }
 
     const minPrice =
@@ -122,29 +88,12 @@ router.get(
     if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
       throw new HttpError(400, 'minPrice는 maxPrice보다 클 수 없습니다.');
     }
-    if (minPrice !== null && maxPrice !== null) {
-      where.price = { [Op.between]: [minPrice, maxPrice] };
-    } else if (minPrice !== null) {
-      where.price = { [Op.gte]: minPrice };
-    } else if (maxPrice !== null) {
-      where.price = { [Op.lte]: maxPrice };
-    }
+    if (!['latest', 'priceAsc', 'priceDesc'].includes(sort)) throw new HttpError(400, 'sort는 latest, priceAsc, priceDesc 중 하나여야 합니다.');
 
-    const orderMap = {
-      latest: [['createdAt', 'DESC'], ['id', 'DESC']],
-      priceAsc: [['price', 'ASC'], ['id', 'DESC']],
-      priceDesc: [['price', 'DESC'], ['id', 'DESC']],
-    };
-    const order = orderMap[sort];
-    if (!order) throw new HttpError(400, 'sort는 latest, priceAsc, priceDesc 중 하나여야 합니다.');
-
-    const { count: total, rows: posts } = await MarketPost.findAndCountAll({
-      where,
-      order,
+    const { count: total, rows: posts } = await MarketPost.listPage({
+      brand, category, status, sort, minPrice, maxPrice,
       limit,
       offset,
-      include: postIncludes,
-      distinct: true,
     });
 
     ok(res, posts, 200, { pagination: pagination(page, limit, total) });
@@ -161,11 +110,7 @@ router.get(
   '/my',
   auth,
   asyncHandler(async (req, res) => {
-    const posts = await MarketPost.findAll({
-      where: { userId: req.user.id },
-      order: [['createdAt', 'DESC'], ['id', 'DESC']],
-      include: postIncludes,
-    });
+    const posts = await MarketPost.listOwn(req.user.id);
     ok(res, posts);
   })
 );
@@ -178,7 +123,7 @@ router.get(
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const post = await findPost(req.params.id);
+    const post = await MarketPost.findDetail(req.params.id);
     ok(res, post);
   })
 );
@@ -193,9 +138,8 @@ router.post(
   '/',
   auth,
   asyncHandler(async (req, res) => {
-    const cols = await bodyToColumns(req.body, true);
-    const post = await MarketPost.create({ ...cols, userId: req.user.id });
-    const created = await findPost(post.id);
+    const cols = bodyToColumns(req.body, true);
+    const created = await MarketPost.createPost({ ...cols, userId: req.user.id });
     ok(res, created, 201);
   })
 );
@@ -211,15 +155,14 @@ router.put(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    const post = await findOwnPost(req.params.id, req.user.id);
-    checkNoOrder(post);
+    const post = await MarketPost.findOwn(req.params.id, req.user.id);
+    post.assertNoOrder();
     if (req.body.status !== undefined) {
       throw new HttpError(400, '거래 상태는 PATCH /api/market/:id/status로 변경해 주세요.');
     }
-    const cols = await bodyToColumns(req.body, false);
+    const cols = bodyToColumns(req.body, false);
     if (Object.keys(cols).length === 0) throw new HttpError(400, '수정할 항목을 입력해 주세요.');
-    await post.update(cols);
-    const updated = await findPost(req.params.id);
+    const updated = await MarketPost.changeOwn(req.params.id, req.user.id, cols);
     ok(res, updated);
   })
 );
@@ -236,10 +179,9 @@ router.patch(
   asyncHandler(async (req, res) => {
     const { status } = req.body;
     if (!MARKET_STATUS.includes(status)) throw new HttpError(400, `status는 ${MARKET_STATUS.join(', ')} 중 하나여야 합니다.`);
-    const post = await findOwnPost(req.params.id, req.user.id);
-    checkNoOrder(post);
-    await post.update({ status });
-    const updated = await findPost(req.params.id);
+    const post = await MarketPost.findOwn(req.params.id, req.user.id);
+    post.assertNoOrder();
+    const updated = await MarketPost.changeOwn(req.params.id, req.user.id, { status });
     ok(res, updated);
   })
 );
@@ -254,9 +196,9 @@ router.delete(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    const post = await findOwnPost(req.params.id, req.user.id);
-    checkNoOrder(post);
-    await post.destroy();
+    const post = await MarketPost.findOwn(req.params.id, req.user.id);
+    post.assertNoOrder();
+    await MarketPost.removeOwn(req.params.id, req.user.id);
     ok(res, { id: Number(req.params.id), message: '판매글이 삭제되었습니다.' });
   })
 );

@@ -6,8 +6,6 @@
 // PUT    /me      닉네임·비밀번호 수정
 // DELETE /me      회원 탈퇴
 const express = require('express');
-const bcrypt = require('bcryptjs');
-const { Op } = require('sequelize');
 const { User } = require('../models');
 const { auth, signToken, revokeToken } = require('../middlewares/auth');
 const { HttpError, asyncHandler, ok, requireText } = require('../utils/http');
@@ -28,17 +26,6 @@ function checkNickname(nickname) {
   return value;
 }
 
-const formatUser = (user) => {
-  const u = user.toJSON ? user.toJSON() : user;
-  return {
-    id: u.id,
-    email: u.email,
-    nickname: u.nickname,
-    role: u.role,
-    createdAt: u.createdAt,
-  };
-};
-
 /**
  * [핵심 API 1] 회원가입
  * - Method / Path: POST /api/users/signup
@@ -53,15 +40,8 @@ router.post(
     checkPassword(password);
     const nick = checkNickname(nickname);
 
-    const dupEmail = await User.findOne({ where: { email } });
-    if (dupEmail) throw new HttpError(409, '이미 가입된 이메일입니다.');
-
-    const dupNick = await User.findOne({ where: { nickname: nick } });
-    if (dupNick) throw new HttpError(409, '이미 사용 중인 닉네임입니다.');
-
-    const hash = await bcrypt.hash(password, 10);
-    const user = await User.create({ email, password: hash, nickname: nick });
-    ok(res, formatUser(user), 201);
+    const user = await User.register({ email, password, nickname: nick });
+    ok(res, user, 201);
   })
 );
 
@@ -77,11 +57,8 @@ router.post(
     const { email, password } = req.body;
     if (!email || !password) throw new HttpError(400, '이메일과 비밀번호를 입력해 주세요.');
 
-    const user = await User.findOne({ where: { email } });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      throw new HttpError(401, '이메일 또는 비밀번호가 올바르지 않습니다.');
-    }
-    ok(res, { token: signToken(user), user: formatUser(user) });
+    const user = await User.authenticate(email, password);
+    ok(res, { token: signToken(user), user });
   })
 );
 
@@ -109,8 +86,8 @@ router.get(
   '/me',
   auth,
   asyncHandler(async (req, res) => {
-    const user = await User.findByPk(req.user.id);
-    ok(res, formatUser(user));
+    const user = await User.findProfile(req.user.id);
+    ok(res, user);
   })
 );
 
@@ -129,31 +106,16 @@ router.put(
       throw new HttpError(400, '수정할 닉네임 또는 비밀번호를 입력해 주세요.');
     }
 
-    const user = await User.findByPk(req.user.id);
-    if (!user) throw new HttpError(404, '회원을 찾을 수 없습니다.');
-
-    if (nickname !== undefined) {
-      const nick = checkNickname(nickname);
-      const dup = await User.findOne({
-        where: { nickname: nick, id: { [Op.ne]: req.user.id } },
-      });
-      if (dup) throw new HttpError(409, '이미 사용 중인 닉네임입니다.');
-      user.nickname = nick;
-    }
-
+    const changes = {};
+    if (nickname !== undefined) changes.nickname = checkNickname(nickname);
     if (password !== undefined) {
-      if (!currentPassword) {
-        throw new HttpError(400, '현재 비밀번호를 입력해 주세요.');
-      }
-      if (!(await bcrypt.compare(currentPassword, user.password))) {
-        throw new HttpError(400, '현재 비밀번호가 일치하지 않습니다.');
-      }
+      if (!currentPassword) throw new HttpError(400, '현재 비밀번호를 입력해 주세요.');
       checkPassword(password);
-      user.password = await bcrypt.hash(password, 10);
+      changes.password = password;
+      changes.currentPassword = currentPassword;
     }
-
-    await user.save();
-    ok(res, formatUser(user));
+    const user = await User.changeProfile(req.user.id, changes);
+    ok(res, user);
   })
 );
 
@@ -167,8 +129,7 @@ router.delete(
   '/me',
   auth,
   asyncHandler(async (req, res) => {
-    const user = await User.findByPk(req.user.id);
-    if (user) await user.destroy();
+    await User.removeProfile(req.user.id);
     await revokeToken(req.tokenId, req.tokenExp);
     ok(res, { message: '회원 탈퇴가 완료되었습니다.' });
   })

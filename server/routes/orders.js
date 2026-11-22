@@ -18,7 +18,7 @@
 //
 // 주의: '/my', '/sales'는 '/:id'보다 위에 선언해야 합니다.
 const express = require('express');
-const { Order, MarketPost, User, sequelize } = require('../models');
+const { Order } = require('../models');
 const { auth, adminOnly } = require('../middlewares/auth');
 const { HttpError, asyncHandler, ok, requireText } = require('../utils/http');
 const { ORDER_STAGES } = require('../utils/constants');
@@ -26,54 +26,6 @@ const { ORDER_STAGES } = require('../utils/constants');
 const router = express.Router();
 
 const PHONE_RE = /^01[016789]-?\d{3,4}-?\d{4}$/;
-
-const orderIncludes = [
-  {
-    model: MarketPost,
-    as: 'post',
-    attributes: ['id', 'title', 'brand', 'perfumeId', 'status', 'userId'],
-    include: [{ model: User, as: 'seller', attributes: ['id', 'nickname'] }],
-  },
-  {
-    model: User,
-    as: 'buyer',
-    attributes: ['id', 'nickname'],
-  },
-];
-
-// withReceiver가 true일 때만 구매자 개인정보(이름·전화번호·주소)를 포함
-function formatOrder(order, withReceiver) {
-  const o = order.toJSON ? order.toJSON() : order;
-  return {
-    id: o.id,
-    stage: o.stage,
-    price: o.price,
-    post: o.post
-      ? {
-          id: o.post.id,
-          title: o.post.title,
-          brand: o.post.brand,
-          perfumeId: o.post.perfumeId,
-          status: o.post.status,
-        }
-      : null,
-    seller: o.post && o.post.seller ? { id: o.post.seller.id, nickname: o.post.seller.nickname } : null,
-    buyer: o.buyer ? { id: o.buyer.id, nickname: o.buyer.nickname } : null,
-    receiver: withReceiver
-      ? { name: o.receiverName, phone: o.receiverPhone, address: o.address }
-      : null,
-    shippedAt: o.shippedAt,
-    receivedAt: o.receivedAt,
-    deliveredAt: o.deliveredAt,
-    createdAt: o.createdAt,
-  };
-}
-
-async function findOrder(id) {
-  const order = await Order.findByPk(id, { include: orderIncludes });
-  if (!order) throw new HttpError(404, '거래를 찾을 수 없습니다.');
-  return order;
-}
 
 // 구매 신청 본문 검사
 function checkReceiver(body) {
@@ -83,26 +35,6 @@ function checkReceiver(body) {
   const address = requireText(body.address, '배송주소(address)', 200);
   if (address.length < 5) throw new HttpError(400, '배송주소를 정확히 입력해 주세요.');
   return { receiverName: name, receiverPhone: phone, address };
-}
-
-/**
- * 거래 단계를 한 단계 이동 (현재 단계가 from일 때만 to로 변경)
- * - 진행: timeField에 현재 시각 기록 / 취소(undo = true): timeField를 비움
- * - postStatus를 주면 판매글 상태도 함께 변경 → Sequelize 트랜잭션으로 원자적 처리
- */
-async function moveStage(orderId, from, to, timeField, postStatus, undo = false) {
-  await sequelize.transaction(async (t) => {
-    const order = await Order.findByPk(orderId, { transaction: t, lock: t.LOCK.UPDATE });
-    if (!order) throw new HttpError(404, '거래를 찾을 수 없습니다.');
-    if (order.stage !== from) {
-      throw new HttpError(409, `'${from}' 단계의 거래만 처리할 수 있습니다. (현재: ${order.stage})`);
-    }
-    const updateData = { stage: to, [timeField]: undo ? null : new Date() };
-    await order.update(updateData, { transaction: t });
-    if (postStatus) {
-      await MarketPost.update({ status: postStatus }, { where: { id: order.postId }, transaction: t });
-    }
-  });
 }
 
 /**
@@ -122,28 +54,8 @@ router.post(
     if (!Number.isInteger(postId) || postId < 1) throw new HttpError(400, '구매할 판매글(postId)을 선택해 주세요.');
     const receiver = checkReceiver(req.body);
 
-    let orderId;
-    await sequelize.transaction(async (t) => {
-      const post = await MarketPost.findByPk(postId, { transaction: t, lock: t.LOCK.UPDATE });
-      if (!post) throw new HttpError(404, '판매글을 찾을 수 없습니다.');
-      if (post.userId === req.user.id) throw new HttpError(403, '본인이 올린 판매글은 구매할 수 없습니다.');
-      if (post.status !== '판매중') throw new HttpError(409, `이미 거래가 진행 중인 판매글입니다. (${post.status})`);
-
-      const order = await Order.create(
-        {
-          ...receiver,
-          postId: post.id,
-          buyerId: req.user.id,
-          price: post.price,
-        },
-        { transaction: t }
-      );
-      await post.update({ status: '예약중' }, { transaction: t });
-      orderId = order.id;
-    });
-
-    const created = await findOrder(orderId);
-    ok(res, formatOrder(created, true), 201);
+    const created = await Order.purchase(postId, req.user.id, receiver);
+    ok(res, created.toResponse(true), 201);
   })
 );
 
@@ -157,12 +69,8 @@ router.get(
   '/my',
   auth,
   asyncHandler(async (req, res) => {
-    const orders = await Order.findAll({
-      where: { buyerId: req.user.id },
-      order: [['createdAt', 'DESC'], ['id', 'DESC']],
-      include: orderIncludes,
-    });
-    ok(res, orders.map((o) => formatOrder(o, true)));
+    const orders = await Order.listPurchases(req.user.id);
+    ok(res, orders.map((o) => o.toResponse(true)));
   })
 );
 
@@ -176,24 +84,8 @@ router.get(
   '/sales',
   auth,
   asyncHandler(async (req, res) => {
-    const orders = await Order.findAll({
-      include: [
-        {
-          model: MarketPost,
-          as: 'post',
-          where: { userId: req.user.id },
-          attributes: ['id', 'title', 'brand', 'perfumeId', 'status', 'userId'],
-          include: [{ model: User, as: 'seller', attributes: ['id', 'nickname'] }],
-        },
-        {
-          model: User,
-          as: 'buyer',
-          attributes: ['id', 'nickname'],
-        },
-      ],
-      order: [['createdAt', 'DESC'], ['id', 'DESC']],
-    });
-    ok(res, orders.map((o) => formatOrder(o, false)));
+    const orders = await Order.listSales(req.user.id);
+    ok(res, orders.map((o) => o.toResponse(false)));
   })
 );
 
@@ -214,15 +106,8 @@ router.get(
       throw new HttpError(400, `stage는 ${ORDER_STAGES.join(', ')} 중 하나여야 합니다.`);
     }
 
-    const where = {};
-    if (stage) where.stage = stage;
-
-    const orders = await Order.findAll({
-      where,
-      order: [['createdAt', 'ASC'], ['id', 'ASC']],
-      include: orderIncludes,
-    });
-    ok(res, orders.map((o) => formatOrder(o, true)));
+    const orders = await Order.listAll(stage);
+    ok(res, orders.map((o) => o.toResponse(true)));
   })
 );
 
@@ -236,12 +121,12 @@ router.get(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    const order = await findOrder(req.params.id);
+    const order = await Order.findDetail(req.params.id);
     const isAdmin = req.user.role === 'admin';
     const isBuyer = order.buyerId === req.user.id;
     const isSeller = order.post && order.post.userId === req.user.id;
     if (!isAdmin && !isBuyer && !isSeller) throw new HttpError(403, '거래 당사자와 관리자만 볼 수 있습니다.');
-    ok(res, formatOrder(order, isAdmin || isBuyer));
+    ok(res, order.toResponse(isAdmin || isBuyer));
   })
 );
 
@@ -255,11 +140,11 @@ router.patch(
   '/:id/ship',
   auth,
   asyncHandler(async (req, res) => {
-    const order = await findOrder(req.params.id);
+    const order = await Order.findDetail(req.params.id);
     if (!order.post || order.post.userId !== req.user.id) throw new HttpError(403, '판매자 본인만 발송 처리할 수 있습니다.');
-    await moveStage(order.id, '구매신청', '판매자발송', 'shippedAt');
-    const updated = await findOrder(order.id);
-    ok(res, formatOrder(updated, false));
+    await Order.moveStage(order.id, '구매신청', '판매자발송', 'shippedAt');
+    const updated = await Order.findDetail(order.id);
+    ok(res, updated.toResponse(false));
   })
 );
 
@@ -273,10 +158,10 @@ router.patch(
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    const order = await findOrder(req.params.id);
-    await moveStage(order.id, '판매자발송', '인수완료', 'receivedAt');
-    const updated = await findOrder(order.id);
-    ok(res, formatOrder(updated, true));
+    const order = await Order.findDetail(req.params.id);
+    await Order.moveStage(order.id, '판매자발송', '인수완료', 'receivedAt');
+    const updated = await Order.findDetail(order.id);
+    ok(res, updated.toResponse(true));
   })
 );
 
@@ -290,10 +175,10 @@ router.patch(
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    const order = await findOrder(req.params.id);
-    await moveStage(order.id, '인수완료', '인계완료', 'deliveredAt', '판매완료');
-    const updated = await findOrder(order.id);
-    ok(res, formatOrder(updated, true));
+    const order = await Order.findDetail(req.params.id);
+    await Order.moveStage(order.id, '인수완료', '인계완료', 'deliveredAt', '판매완료');
+    const updated = await Order.findDetail(order.id);
+    ok(res, updated.toResponse(true));
   })
 );
 
@@ -308,10 +193,10 @@ router.delete(
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    const order = await findOrder(req.params.id);
-    await moveStage(order.id, '인수완료', '판매자발송', 'receivedAt', null, true);
-    const updated = await findOrder(order.id);
-    ok(res, formatOrder(updated, true));
+    const order = await Order.findDetail(req.params.id);
+    await Order.moveStage(order.id, '인수완료', '판매자발송', 'receivedAt', null, true);
+    const updated = await Order.findDetail(order.id);
+    ok(res, updated.toResponse(true));
   })
 );
 
@@ -326,10 +211,10 @@ router.delete(
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    const order = await findOrder(req.params.id);
-    await moveStage(order.id, '인계완료', '인수완료', 'deliveredAt', '예약중', true);
-    const updated = await findOrder(order.id);
-    ok(res, formatOrder(updated, true));
+    const order = await Order.findDetail(req.params.id);
+    await Order.moveStage(order.id, '인계완료', '인수완료', 'deliveredAt', '예약중', true);
+    const updated = await Order.findDetail(order.id);
+    ok(res, updated.toResponse(true));
   })
 );
 
@@ -342,25 +227,8 @@ router.delete(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    const order = await findOrder(req.params.id);
-    const isAdmin = req.user.role === 'admin';
-    if (!isAdmin && order.buyerId !== req.user.id) throw new HttpError(403, '구매자 본인 또는 관리자만 취소할 수 있습니다.');
-    const cancelable = isAdmin ? ['구매신청', '판매자발송', '인수완료'] : ['구매신청'];
-
-    await sequelize.transaction(async (t) => {
-      const lockedOrder = await Order.findByPk(order.id, { transaction: t, lock: t.LOCK.UPDATE });
-      if (!lockedOrder) throw new HttpError(404, '거래를 찾을 수 없습니다.');
-      if (!cancelable.includes(lockedOrder.stage)) {
-        throw new HttpError(
-          409,
-          isAdmin
-            ? '이미 구매자에게 인계한 거래입니다. 인계 취소를 먼저 해 주세요.'
-            : '판매자가 이미 물품을 보내서 취소할 수 없습니다. 관리자에게 문의해 주세요.'
-        );
-      }
-      await lockedOrder.destroy({ transaction: t });
-      await MarketPost.update({ status: '판매중' }, { where: { id: lockedOrder.postId }, transaction: t });
-    });
+    const order = await Order.findDetail(req.params.id);
+    await Order.cancel(order.id, req.user);
 
     ok(res, { id: order.id, message: '거래가 취소되었습니다. 판매글이 다시 판매중으로 바뀌었습니다.' });
   })

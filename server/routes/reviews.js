@@ -6,29 +6,11 @@
 // PUT    /:id                 수정 (본인만)
 // DELETE /:id                 삭제 (본인만)
 const express = require('express');
-const { Sequelize } = require('sequelize');
-const { Review, User, Perfume } = require('../models');
+const { Review } = require('../models');
 const { auth } = require('../middlewares/auth');
 const { HttpError, asyncHandler, ok, parsePaging, pagination, toInt, requireText } = require('../utils/http');
 
 const router = express.Router();
-
-// 작성자 닉네임, 향수 정보를 함께 가져오는 include 설정
-const reviewIncludes = [
-  { model: User, as: 'user', attributes: ['id', 'nickname'] },
-  { model: Perfume, as: 'perfume', attributes: ['brand', 'name'] },
-];
-
-async function findReview(id) {
-  const review = await Review.findByPk(id, { include: reviewIncludes });
-  if (!review) throw new HttpError(404, '리뷰를 찾을 수 없습니다.');
-  return review;
-}
-
-async function ensurePerfume(perfumeId) {
-  const perfume = await Perfume.findByPk(perfumeId, { attributes: ['id'] });
-  if (!perfume) throw new HttpError(404, '향수를 찾을 수 없습니다.');
-}
 
 const checkRating = (rating) => toInt(rating, '별점(rating)', { min: 1, max: 5 });
 const checkContent = (content) => requireText(content, '후기 내용(content)', 1000);
@@ -45,24 +27,8 @@ router.get(
     const { perfumeId, sort = 'latest' } = req.query;
     const { page, limit, offset } = parsePaging(req.query, 10, 50);
 
-    const orderMap = {
-      latest: [['createdAt', 'DESC'], ['id', 'DESC']],
-      rating: [['rating', 'DESC'], ['createdAt', 'DESC'], ['id', 'DESC']],
-    };
-    const order = orderMap[sort];
-    if (!order) throw new HttpError(400, 'sort는 latest 또는 rating이어야 합니다.');
-
-    const where = {};
-    if (perfumeId) where.perfumeId = perfumeId;
-
-    const { count: total, rows: reviews } = await Review.findAndCountAll({
-      where,
-      order,
-      limit,
-      offset,
-      include: reviewIncludes,
-      distinct: true,
-    });
+    if (!['latest', 'rating'].includes(sort)) throw new HttpError(400, 'sort는 latest 또는 rating이어야 합니다.');
+    const { count: total, rows: reviews } = await Review.listPage({ perfumeId, sort, limit, offset });
 
     ok(res, reviews, 200, { pagination: pagination(page, limit, total) });
   })
@@ -77,30 +43,7 @@ router.get(
   '/stats/:perfumeId',
   asyncHandler(async (req, res) => {
     const { perfumeId } = req.params;
-    await ensurePerfume(perfumeId);
-
-    const rows = await Review.findAll({
-      attributes: ['rating', [Sequelize.fn('COUNT', Sequelize.col('id')), 'cnt']],
-      where: { perfumeId },
-      group: ['rating'],
-      raw: true,
-    });
-
-    const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    let count = 0;
-    let sum = 0;
-    for (const r of rows) {
-      distribution[r.rating] = Number(r.cnt);
-      count += Number(r.cnt);
-      sum += r.rating * Number(r.cnt);
-    }
-
-    ok(res, {
-      perfumeId,
-      reviewCount: count,
-      averageRating: count ? Math.round((sum / count) * 10) / 10 : 0,
-      distribution,
-    });
+    ok(res, await Review.statistics(perfumeId));
   })
 );
 
@@ -108,7 +51,7 @@ router.get(
 router.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const review = await findReview(req.params.id);
+    const review = await Review.findDetail(req.params.id);
     ok(res, review);
   })
 );
@@ -129,47 +72,16 @@ router.post(
     if (!perfumeId) throw new HttpError(400, '향수(perfumeId)를 선택해 주세요.');
     const rating = checkRating(req.body.rating);
     const content = checkContent(req.body.content);
-    await ensurePerfume(perfumeId);
-
-    const existing = await Review.findOne({
-      where: { userId: req.user.id, perfumeId },
-      attributes: ['id'],
-    });
-    if (existing) {
-      throw new HttpError(409, '이미 이 향수에 작성한 리뷰가 있습니다. 기존 리뷰를 수정해 주세요.');
-    }
-
-    try {
-      const created = await Review.create({
-        userId: req.user.id,
-        perfumeId,
-        rating,
-        content,
-      });
-      const review = await findReview(created.id);
-      ok(res, review, 201);
-    } catch (err) {
-      if (err.name === 'SequelizeUniqueConstraintError' || err.code === 'ER_DUP_ENTRY') {
-        throw new HttpError(409, '이미 이 향수에 작성한 리뷰가 있습니다.');
-      }
-      throw err;
-    }
+    const review = await Review.createReview({ userId: req.user.id, perfumeId, rating, content });
+    ok(res, review, 201);
   })
 );
-
-// 본인 리뷰인지 확인 (없으면 404, 남의 리뷰면 403)
-async function findOwnReview(id, userId) {
-  const review = await findReview(id);
-  if (review.userId !== userId) throw new HttpError(403, '본인이 작성한 리뷰만 수정·삭제할 수 있습니다.');
-  return review;
-}
 
 // 수정: PUT /api/reviews/:id  { rating?, content? }
 router.put(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    const review = await findOwnReview(req.params.id, req.user.id);
     const { rating, content } = req.body;
     if (rating === undefined && content === undefined) throw new HttpError(400, '수정할 별점 또는 내용을 입력해 주세요.');
 
@@ -177,8 +89,7 @@ router.put(
     if (rating !== undefined) updates.rating = checkRating(rating);
     if (content !== undefined) updates.content = checkContent(content);
 
-    await review.update(updates);
-    const updated = await findReview(req.params.id);
+    const updated = await Review.changeOwn(req.params.id, req.user.id, updates);
     ok(res, updated);
   })
 );
@@ -188,8 +99,7 @@ router.delete(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    const review = await findOwnReview(req.params.id, req.user.id);
-    await review.destroy();
+    await Review.removeOwn(req.params.id, req.user.id);
     ok(res, { id: Number(req.params.id), message: '리뷰가 삭제되었습니다.' });
   })
 );
