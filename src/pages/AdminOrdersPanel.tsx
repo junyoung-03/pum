@@ -35,7 +35,7 @@ const ACTIONS: Record<
   deliver: {
     method: 'PATCH',
     path: (id) => `/orders/${id}/deliver`,
-    confirm: (o) => `'${o.post.title}' 물품을 구매자 ${o.receiver?.name ?? ''}님에게 보냈습니까?`,
+    confirm: (o) => `'${o.post.title}' 물품을 구매자 ${o.receiverName ?? ''}님에게 보냈습니까?`,
     done: (o) => `'${o.post.title}' 물품 인계를 완료했습니다. 판매글이 판매완료로 바뀌었습니다.`
   },
   undoReceive: {
@@ -141,7 +141,7 @@ export default function AdminOrdersPanel({
                   <li key={o.id}>
                     {title(o)}
                     <p className="order-item-meta">
-                      거래 #{o.id} · {formatPrice(o.price)} · 판매자 {o.seller.nickname} → 구매자 {o.buyer.nickname}
+                      거래 #{o.id} · {formatPrice(o.price)} · 판매자 {o.post.seller.nickname} → 구매자 {o.buyer.nickname}
                     </p>
                     <p className="order-item-meta">구매 신청 {fmt(o.createdAt)} · 판매자 발송 {fmt(o.shippedAt)}</p>
                     <div className="order-actions">
@@ -165,7 +165,7 @@ export default function AdminOrdersPanel({
                   <li key={o.id}>
                     {title(o)}
                     <p className="order-item-meta">
-                      거래 #{o.id} · {formatPrice(o.price)} · 판매자 {o.seller.nickname} · 신청 {fmt(o.createdAt)}
+                      거래 #{o.id} · {formatPrice(o.price)} · 판매자 {o.post.seller.nickname} · 신청 {fmt(o.createdAt)}
                     </p>
                     <div className="order-actions">{btn('cancel', o, '거래 취소 (판매중으로)', 'danger')}</div>
                   </li>
@@ -198,16 +198,14 @@ export default function AdminOrdersPanel({
                   <p className="order-item-meta">
                     거래 #{o.id} · {formatPrice(o.price)} · 인수 {fmt(o.receivedAt)}
                   </p>
-                  {o.receiver && (
-                    <dl className="receiver-box">
-                      <dt>받는 분</dt>
-                      <dd>{o.receiver.name}</dd>
-                      <dt>전화번호</dt>
-                      <dd>{o.receiver.phone}</dd>
-                      <dt>배송주소</dt>
-                      <dd>{o.receiver.address}</dd>
-                    </dl>
-                  )}
+                  <dl className="receiver-box">
+                    <dt>받는 분</dt>
+                    <dd>{o.receiverName}</dd>
+                    <dt>전화번호</dt>
+                    <dd>{o.receiverPhone}</dd>
+                    <dt>배송주소</dt>
+                    <dd>{o.address}</dd>
+                  </dl>
                   <div className="order-actions">
                     {btn('deliver', o, '인계 완료', 'primary')}
                     {btn('undoReceive', o, '인수 취소', 'secondary')}
@@ -230,7 +228,7 @@ export default function AdminOrdersPanel({
                 <li key={o.id}>
                   {title(o)}
                   <p className="order-item-meta">
-                    거래 #{o.id} · {formatPrice(o.price)} · {o.receiver?.name} · 발송 {fmt(o.deliveredAt)}
+                    거래 #{o.id} · {formatPrice(o.price)} · {o.receiverName} · 발송 {fmt(o.deliveredAt)}
                   </p>
                   <div className="order-actions">{btn('undoDeliver', o, '인계 취소', 'secondary')}</div>
                 </li>

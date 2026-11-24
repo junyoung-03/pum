@@ -30,17 +30,21 @@ module.exports = class MarketPost extends Sequelize.Model {
           type: Sequelize.ENUM('Floral', 'Woody', 'Musk', 'Citrus', 'Amber'),
           allowNull: true,
         },
+        // validate는 schema.sql의 CHECK 제약과 같은 범위
         volumeMl: {
           type: Sequelize.INTEGER,
           allowNull: false,
+          validate: { min: 1 },
         },
         remainPercent: {
           type: Sequelize.TINYINT,
           allowNull: false,
+          validate: { min: 1, max: 100 },
         },
         price: {
           type: Sequelize.INTEGER,
           allowNull: false,
+          validate: { min: 0 },
         },
         content: {
           type: Sequelize.TEXT,
@@ -79,26 +83,21 @@ module.exports = class MarketPost extends Sequelize.Model {
     return post;
   }
 
-  static async findOwn(id, userId) {
+  // 본인 글이고 구매 신청이 없는 글만 수정·상태 변경·삭제 가능
+  static async findEditable(id, userId) {
     const post = await this.findDetail(id);
     if (post.userId !== userId) throw new HttpError(403, '본인이 작성한 판매글만 수정·삭제할 수 있습니다.');
+    if (post.order) throw new HttpError(409, '구매 신청이 들어온 판매글은 수정·삭제하거나 상태를 직접 바꿀 수 없습니다. (거래 단계에 따라 자동 변경)');
     return post;
   }
 
-  assertNoOrder() {
-    if (this.order) throw new HttpError(409, '구매 신청이 들어온 판매글은 수정·삭제하거나 상태를 직접 바꿀 수 없습니다. (거래 단계에 따라 자동 변경)');
-  }
-
   static async changeOwn(id, userId, values) {
-    const post = await this.findOwn(id, userId);
-    post.assertNoOrder();
-    await post.update(await this.resolvePerfume(values));
-    return this.findDetail(id);
+    const post = await this.findEditable(id, userId);
+    return post.update(await this.resolvePerfume(values));
   }
 
   static async removeOwn(id, userId) {
-    const post = await this.findOwn(id, userId);
-    post.assertNoOrder();
+    const post = await this.findEditable(id, userId);
     await post.destroy();
   }
 
@@ -139,8 +138,8 @@ module.exports = class MarketPost extends Sequelize.Model {
   }
 
   static associate(db) {
-    db.MarketPost.belongsTo(db.User, { foreignKey: 'userId', as: 'seller', targetKey: 'id' });
-    db.MarketPost.belongsTo(db.Perfume, { foreignKey: 'perfumeId', as: 'perfume', targetKey: 'id' });
-    db.MarketPost.hasOne(db.Order, { foreignKey: 'postId', as: 'order', sourceKey: 'id' });
+    db.MarketPost.belongsTo(db.User, { foreignKey: 'userId', targetKey: 'id', as: 'seller', onDelete: 'CASCADE', onUpdate: 'NO ACTION' });
+    db.MarketPost.belongsTo(db.Perfume, { foreignKey: 'perfumeId', targetKey: 'id', as: 'perfume', onDelete: 'SET NULL', onUpdate: 'CASCADE' });
+    db.MarketPost.hasOne(db.Order, { foreignKey: 'postId', sourceKey: 'id', as: 'order', onDelete: 'CASCADE', onUpdate: 'NO ACTION' });
   }
 };

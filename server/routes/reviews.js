@@ -62,7 +62,7 @@ router.get(
  * - Request Body: { perfumeId, rating(1~5), content }
  * - 핵심 로직 & 보안:
  *   1) 한 사용자가 동일 향수에 여러 번 리뷰를 남겨 별점을 조작하는 것을 방지
- *   2) DB 복합 유니크 제약 `UNIQUE (user_id, perfume_id)` + 사전 SELECT 검증으로 중복 작성 시 409 Conflict 응답
+ *   2) DB 복합 유니크 제약 `UNIQUE (user_id, perfume_id)`로 중복 작성 시 409 Conflict 응답
  */
 router.post(
   '/',

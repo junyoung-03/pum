@@ -66,19 +66,6 @@ module.exports = class RecommendHistory extends Sequelize.Model {
     );
   }
 
-  toJSON() {
-    const data = super.toJSON();
-    data.answers = {};
-    for (const field of ['mood', 'season', 'category', 'purpose']) {
-      data.answers[field] = data[field];
-      delete data[field];
-    }
-    delete data.userId;
-    delete data.perfumeId;
-    return data;
-  }
-
-
   // 추천 이유 문장 (프론트 ResultPage.tsx의 generateReason과 같은 문장)
   static generateReason(answers, perfume) {
     const parts = [];
@@ -89,8 +76,8 @@ module.exports = class RecommendHistory extends Sequelize.Model {
 
     const criteriaText = parts.length > 0 ? `선택하신 ${parts.join(', ')}를 기준으로 분석했습니다.` : '';
     const brandText = `${perfume.brand}의 ${perfume.name}은(는)`;
-    const moodDesc = (perfume.moodTags || []).slice(0, 2).join(', ');
-    const purposeDesc = (perfume.purpose || []).join(' 또는 ');
+    const moodDesc = perfume.moodTags.slice(0, 2).join(', ');
+    const purposeDesc = perfume.purpose.join(' 또는 ');
     return `${criteriaText} ${brandText} ${moodDesc} 무드를 연출하며, ${purposeDesc} 상황에 특히 잘 어울리는 향수입니다.`;
   }
 
@@ -103,9 +90,9 @@ module.exports = class RecommendHistory extends Sequelize.Model {
     const results = perfumes.map((perfume) => {
       let score = 0;
       const matchedCriteria = [];
-      const pMood = perfume.mood || [];
-      const pSeason = perfume.season || [];
-      const pPurpose = perfume.purpose || [];
+      const pMood = perfume.mood;
+      const pSeason = perfume.season;
+      const pPurpose = perfume.purpose;
 
       if (answers.mood && pMood.includes(answers.mood)) {
         score += 30;
@@ -140,56 +127,34 @@ module.exports = class RecommendHistory extends Sequelize.Model {
     return { ...best, reason: this.generateReason(answers, best.perfume) };
   }
 
-
+  // 통계: 전체 추천 수, 항목별 많이 고른 답변, 많이 추천된 향수 [{ perfumeId, count, perfume: {...} }]
   static async statistics() {
-    const total = await this.count();
+    const totalCount = await this.count();
 
     const topAnswers = {};
     for (const key of ['mood', 'season', 'category', 'purpose']) {
-      const rows = await this.findAll({
-        attributes: [
-          [Sequelize.col(key), 'value'],
-          [Sequelize.fn('COUNT', Sequelize.col('id')), 'cnt'],
-        ],
-        where: {
-          [key]: { [Op.ne]: '' },
-        },
+      topAnswers[key] = await this.findAll({
+        attributes: [[key, 'value'], [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']],
+        where: { [key]: { [Op.ne]: '' } },
         group: [key],
-        order: [[Sequelize.literal('cnt'), 'DESC'], [key, 'ASC']],
+        order: [[Sequelize.literal('`count`'), 'DESC'], [key, 'ASC']],
         limit: 3,
-        raw: true,
       });
-      topAnswers[key] = rows.map((r) => ({ value: r.value, count: Number(r.cnt) }));
     }
 
-    const perfumeRows = await this.findAll({
-      attributes: [
-        [Sequelize.fn('COUNT', Sequelize.col('RecommendHistory.id')), 'cnt'],
-      ],
-      include: [
-        {
-          model: this.sequelize.models.Perfume,
-          as: 'perfume',
-          attributes: ['id', 'brand', 'name', 'image'],
-          required: true,
-        },
-      ],
+    const topPerfumes = await this.findAll({
+      attributes: ['perfumeId', [Sequelize.fn('COUNT', Sequelize.col('RecommendHistory.id')), 'count']],
+      include: [{ ...this.perfumeInclude(), required: true }],
       group: ['RecommendHistory.perfume_id', 'perfume.id', 'perfume.brand', 'perfume.name', 'perfume.image'],
-      order: [[Sequelize.literal('cnt'), 'DESC'], [Sequelize.col('perfume.id'), 'ASC']],
+      order: [[Sequelize.literal('`count`'), 'DESC'], [Sequelize.col('perfume.id'), 'ASC']],
       limit: 5,
-      raw: true,
-      nest: true,
     });
 
-    return {
-      totalCount: Number(total),
-      topAnswers,
-      topPerfumes: perfumeRows.map((row) => ({ ...row.perfume, count: Number(row.cnt) })),
-    };
+    return { totalCount, topAnswers, topPerfumes };
   }
 
   static perfumeInclude() {
-    return [{ model: this.sequelize.models.Perfume, as: 'perfume', attributes: ['id', 'brand', 'name', 'image'] }];
+    return { model: this.sequelize.models.Perfume, as: 'perfume', attributes: ['id', 'brand', 'name', 'image'] };
   }
 
   static async recommend(answers, userId) {
@@ -202,11 +167,11 @@ module.exports = class RecommendHistory extends Sequelize.Model {
   }
 
   static listOwn(userId) {
-    return this.findAll({ where: { userId }, order: [['createdAt', 'DESC'], ['id', 'DESC']], include: this.perfumeInclude() });
+    return this.findAll({ where: { userId }, order: [['createdAt', 'DESC'], ['id', 'DESC']], include: [this.perfumeInclude()] });
   }
 
   static async findOwn(id, userId) {
-    const history = await this.findByPk(id, { include: this.perfumeInclude() });
+    const history = await this.findByPk(id, { include: [this.perfumeInclude()] });
     if (!history) throw new HttpError(404, '추천 기록을 찾을 수 없습니다.');
     if (history.userId !== userId) throw new HttpError(403, '본인의 추천 기록만 볼 수 있습니다.');
     return history;
@@ -218,7 +183,7 @@ module.exports = class RecommendHistory extends Sequelize.Model {
   }
 
   static associate(db) {
-    db.RecommendHistory.belongsTo(db.User, { foreignKey: 'userId', as: 'user', targetKey: 'id' });
-    db.RecommendHistory.belongsTo(db.Perfume, { foreignKey: 'perfumeId', as: 'perfume', targetKey: 'id' });
+    db.RecommendHistory.belongsTo(db.User, { foreignKey: 'userId', targetKey: 'id', as: 'user', onDelete: 'SET NULL', onUpdate: 'NO ACTION' });
+    db.RecommendHistory.belongsTo(db.Perfume, { foreignKey: 'perfumeId', targetKey: 'id', as: 'perfume', onDelete: 'SET NULL', onUpdate: 'CASCADE' });
   }
 };

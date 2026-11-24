@@ -76,11 +76,11 @@ export interface User {
 export interface Review {
   id: number;
   perfumeId: string;
-  perfumeName: string;
   userId: number;
-  authorName: string;
   rating: number;
   content: string;
+  user: { id: number; nickname: string };
+  perfume: { id: string; brand: string; name: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -92,14 +92,19 @@ export interface ReviewStats {
   distribution: Record<string, number>;
 }
 
-// 찜 순위
+// 찜: GET /api/favorites
+export interface Favorite {
+  id: number;
+  perfumeId: string;
+  perfume: Perfume;
+  createdAt: string;
+}
+
+// 찜 순위: GET /api/favorites/ranking (찜이 많은 순서)
 export interface FavoriteRank {
-  rank: number;
-  id: string;
-  brand: string;
-  name: string;
-  image: string;
+  perfumeId: string;
   favoriteCount: number;
+  perfume: PerfumeSummary;
 }
 
 // 추천
@@ -135,9 +140,8 @@ export interface PerfumeSummary {
   image: string;
 }
 
-export interface RecommendHistory {
+export interface RecommendHistory extends RecommendAnswers {
   id: number;
-  answers: RecommendAnswers;
   perfume: PerfumeSummary | null;
   score: number;
   matchedCriteria: string[];
@@ -148,7 +152,7 @@ export interface RecommendHistory {
 export interface RecommendStats {
   totalCount: number;
   topAnswers: Record<keyof RecommendAnswers, { value: string; count: number }[]>;
-  topPerfumes: (PerfumeSummary & { count: number })[];
+  topPerfumes: { perfumeId: string; count: number; perfume: PerfumeSummary }[];
 }
 
 // 중고 판매글
@@ -170,22 +174,24 @@ export interface MarketPost {
   updatedAt: string;
 }
 
-// 구매자 배송 정보 (구매자 본인과 관리자에게만 내려옴)
-export interface OrderReceiver {
-  name: string;
-  phone: string;
-  address: string;
-}
-
 // GET /api/orders, /api/orders/my, /api/orders/sales, /api/orders/:id
 export interface Order {
   id: number;
   stage: OrderStage;
   price: number;
-  post: { id: number; title: string; brand: string; perfumeId: string | null; status: MarketStatus };
-  seller: { id: number; nickname: string };
+  post: {
+    id: number;
+    title: string;
+    brand: string;
+    perfumeId: string | null;
+    status: MarketStatus;
+    seller: { id: number; nickname: string };
+  };
   buyer: { id: number; nickname: string };
-  receiver: OrderReceiver | null;
+  // 구매자 배송 정보 (구매자 본인과 관리자에게만 내려옴)
+  receiverName?: string;
+  receiverPhone?: string;
+  address?: string;
   shippedAt: string | null;
   receivedAt: string | null;
   deliveredAt: string | null;

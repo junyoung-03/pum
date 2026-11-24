@@ -112,7 +112,7 @@ export default function MyOrdersSection() {
                       {o.post.title}
                     </Link>
                     <p className="order-item-meta">
-                      {formatPrice(o.price)} · 판매자 {o.seller.nickname} · 신청 {formatDate(o.createdAt)}
+                      {formatPrice(o.price)} · 판매자 {o.post.seller.nickname} · 신청 {formatDate(o.createdAt)}
                     </p>
                   </div>
                   {o.stage === '구매신청' && (
@@ -122,11 +122,9 @@ export default function MyOrdersSection() {
                   )}
                 </div>
                 <OrderSteps stage={o.stage} />
-                {o.receiver && (
-                  <p className="order-receiver">
-                    배송지: {o.receiver.name} · {o.receiver.phone} · {o.receiver.address}
-                  </p>
-                )}
+                <p className="order-receiver">
+                  배송지: {o.receiverName} · {o.receiverPhone} · {o.address}
+                </p>
               </li>
             ))}
           </ul>

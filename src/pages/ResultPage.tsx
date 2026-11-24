@@ -155,12 +155,12 @@ export default function ResultPage() {
           <div className="result-stats">
             <h4>다른 회원들이 많이 추천받은 향수</h4>
             <ol>
-              {stats.topPerfumes.slice(0, 3).map((p) => (
-                <li key={p.id}>
-                  <Link to={`/detail/${p.id}`}>
-                    {p.brand} {p.name}
+              {stats.topPerfumes.slice(0, 3).map((item) => (
+                <li key={item.perfumeId}>
+                  <Link to={`/detail/${item.perfumeId}`}>
+                    {item.perfume.brand} {item.perfume.name}
                   </Link>
-                  <span>{p.count}회</span>
+                  <span>{item.count}회</span>
                 </li>
               ))}
             </ol>

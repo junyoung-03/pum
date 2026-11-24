@@ -1,8 +1,16 @@
-// Express 앱 설정 (라우터 연결)
+// Express 앱 설정 (미들웨어 설정과 라우터 연결)
 // listen은 server.js에서 하고, 여기서는 app만 내보냅니다. → 테스트(supertest)에서 그대로 사용
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+
+const usersRouter = require('./routes/users');
+const perfumesRouter = require('./routes/perfumes');
+const reviewsRouter = require('./routes/reviews');
+const favoritesRouter = require('./routes/favorites');
+const recommendRouter = require('./routes/recommend');
+const marketRouter = require('./routes/market');
+const ordersRouter = require('./routes/orders');
 
 const app = express();
 
@@ -13,13 +21,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 // [시스템 API] 서버 가동 및 헬스체크 확인
 app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok' } }));
 
-app.use('/api/users', require('./routes/users')); // 회원 (라우터 개수 제외)
-app.use('/api/perfumes', require('./routes/perfumes')); // 1. 향수
-app.use('/api/reviews', require('./routes/reviews')); // 2. 리뷰
-app.use('/api/favorites', require('./routes/favorites')); // 3. 찜
-app.use('/api/recommend', require('./routes/recommend')); // 4. 추천
-app.use('/api/market', require('./routes/market')); // 5. 중고 판매글
-app.use('/api/orders', require('./routes/orders')); // 6. 거래 (관리자 중개 안전거래)
+app.use('/api/users', usersRouter); // 회원 (라우터 개수 제외)
+app.use('/api/perfumes', perfumesRouter); // 1. 향수
+app.use('/api/reviews', reviewsRouter); // 2. 리뷰
+app.use('/api/favorites', favoritesRouter); // 3. 찜
+app.use('/api/recommend', recommendRouter); // 4. 추천
+app.use('/api/market', marketRouter); // 5. 중고 판매글
+app.use('/api/orders', ordersRouter); // 6. 거래 (관리자 중개 안전거래)
 
 // 없는 경로
 app.use((req, res) => {
@@ -31,6 +39,13 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ success: false, message: '요청 본문의 JSON 형식이 올바르지 않습니다.' });
+  }
+  // 모델의 중복 제약(unique)·값 범위(validate) 위반
+  if (err.name === 'SequelizeUniqueConstraintError') {
+    return res.status(409).json({ success: false, message: '이미 등록된 값입니다.' });
+  }
+  if (err.name === 'SequelizeValidationError') {
+    return res.status(400).json({ success: false, message: '입력값이 올바르지 않습니다.' });
   }
   const status = err.status || 500;
   if (status === 500) console.error(err);

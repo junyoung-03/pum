@@ -1,7 +1,6 @@
 const Sequelize = require('sequelize');
 const { HttpError } = require('../utils/http');
 
-
 module.exports = class Review extends Sequelize.Model {
   static init(sequelize) {
     return super.init(
@@ -22,22 +21,11 @@ module.exports = class Review extends Sequelize.Model {
         rating: {
           type: Sequelize.TINYINT,
           allowNull: false,
+          validate: { min: 1, max: 5 }, // schema.sql의 CHECK (rating BETWEEN 1 AND 5)
         },
         content: {
           type: Sequelize.TEXT,
           allowNull: false,
-        },
-        authorName: {
-          type: Sequelize.VIRTUAL,
-          get() {
-            return this.user ? this.user.nickname : undefined;
-          },
-        },
-        perfumeName: {
-          type: Sequelize.VIRTUAL,
-          get() {
-            return this.perfume ? `${this.perfume.brand} ${this.perfume.name}` : undefined;
-          },
         },
       },
       {
@@ -49,6 +37,8 @@ module.exports = class Review extends Sequelize.Model {
         paranoid: false,
         charset: 'utf8mb4',
         collate: 'utf8mb4_unicode_ci',
+        // 한 회원이 같은 향수에 한 번만 (schema.sql의 uq_review)
+        indexes: [{ name: 'uq_review', unique: true, fields: ['user_id', 'perfume_id'] }],
       }
     );
   }
@@ -57,7 +47,7 @@ module.exports = class Review extends Sequelize.Model {
     const { User, Perfume } = this.sequelize.models;
     return [
       { model: User, as: 'user', attributes: ['id', 'nickname'] },
-      { model: Perfume, as: 'perfume', attributes: ['brand', 'name'] },
+      { model: Perfume, as: 'perfume', attributes: ['id', 'brand', 'name'] },
     ];
   }
 
@@ -95,13 +85,12 @@ module.exports = class Review extends Sequelize.Model {
 
   static async createReview(values) {
     await this.sequelize.models.Perfume.findDetail(values.perfumeId);
-    const existing = await this.findOne({ where: { userId: values.userId, perfumeId: values.perfumeId }, attributes: ['id'] });
-    if (existing) throw new HttpError(409, '이미 이 향수에 작성한 리뷰가 있습니다. 기존 리뷰를 수정해 주세요.');
     try {
       const review = await this.create(values);
-      return this.findDetail(review.id);
+      return await this.findDetail(review.id);
     } catch (err) {
-      if (err.name === 'SequelizeUniqueConstraintError' || err.code === 'ER_DUP_ENTRY') throw new HttpError(409, '이미 이 향수에 작성한 리뷰가 있습니다.');
+      // 중복 작성은 uq_review 제약으로 한 번만 검사
+      if (err.name === 'SequelizeUniqueConstraintError') throw new HttpError(409, '이미 이 향수에 작성한 리뷰가 있습니다. 기존 리뷰를 수정해 주세요.');
       throw err;
     }
   }
@@ -114,8 +103,7 @@ module.exports = class Review extends Sequelize.Model {
 
   static async changeOwn(id, userId, values) {
     const review = await this.findOwn(id, userId);
-    await review.update(values);
-    return this.findDetail(id);
+    return review.update(values);
   }
 
   static async removeOwn(id, userId) {
@@ -124,7 +112,7 @@ module.exports = class Review extends Sequelize.Model {
   }
 
   static associate(db) {
-    db.Review.belongsTo(db.User, { foreignKey: 'userId', as: 'user', targetKey: 'id' });
-    db.Review.belongsTo(db.Perfume, { foreignKey: 'perfumeId', as: 'perfume', targetKey: 'id' });
+    db.Review.belongsTo(db.User, { foreignKey: 'userId', targetKey: 'id', as: 'user', onDelete: 'CASCADE', onUpdate: 'NO ACTION' });
+    db.Review.belongsTo(db.Perfume, { foreignKey: 'perfumeId', targetKey: 'id', as: 'perfume', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
   }
 };

@@ -203,9 +203,9 @@ export default function DetailPage() {
                 <article key={review.id} className="review-card">
                   <div className="review-header">
                     <div className="review-author">
-                      <div className="author-avatar">{review.authorName.charAt(0).toUpperCase()}</div>
+                      <div className="author-avatar">{review.user.nickname.charAt(0).toUpperCase()}</div>
                       <div className="author-info">
-                        <p className="author-name">{review.authorName}</p>
+                        <p className="author-name">{review.user.nickname}</p>
                         <p className="review-date">{formatDate(review.createdAt)}</p>
                       </div>
                     </div>

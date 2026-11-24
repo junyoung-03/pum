@@ -3,7 +3,7 @@ import { NavLink, Routes, Route, useLocation, useNavigate } from 'react-router-d
 import { useDispatch, useSelector } from 'react-redux';
 import type { RootState } from '../data/store';
 import { logout, setFavorites, setUser } from '../data/store';
-import type { Perfume, User } from '../data/perfumeData';
+import type { Favorite, User } from '../data/perfumeData';
 import { api } from '../api/client';
 import HomePage from '../pages/HomePage';
 import ListPage from '../pages/ListPage';
@@ -43,8 +43,8 @@ export default function Content() {
     api<User>('/users/me')
       .then(({ data }) => dispatch(setUser(data)))
       .catch(() => undefined);
-    api<Perfume[]>('/favorites')
-      .then(({ data }) => dispatch(setFavorites(data.map((p) => p.id))))
+    api<Favorite[]>('/favorites')
+      .then(({ data }) => dispatch(setFavorites(data.map((favorite) => favorite.perfumeId))))
       .catch(() => undefined);
   }, [token, dispatch]);
 

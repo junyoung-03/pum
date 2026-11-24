@@ -93,10 +93,11 @@ module.exports = class User extends Sequelize.Model {
   }
 
   static associate(db) {
-    db.User.hasMany(db.Review, { foreignKey: 'userId', as: 'reviews', onDelete: 'CASCADE' });
-    db.User.hasMany(db.Favorite, { foreignKey: 'userId', as: 'favorites', onDelete: 'CASCADE' });
-    db.User.hasMany(db.MarketPost, { foreignKey: 'userId', as: 'marketPosts', onDelete: 'CASCADE' });
-    db.User.hasMany(db.Order, { foreignKey: 'buyerId', as: 'boughtOrders', onDelete: 'CASCADE' });
-    db.User.hasMany(db.RecommendHistory, { foreignKey: 'userId', as: 'recommendHistories', onDelete: 'SET NULL' });
+    // onDelete·onUpdate는 db/schema.sql의 외래키 규칙과 같게 유지
+    db.User.hasMany(db.Review, { foreignKey: 'userId', sourceKey: 'id', as: 'reviews', onDelete: 'CASCADE', onUpdate: 'NO ACTION' });
+    db.User.hasMany(db.Favorite, { foreignKey: 'userId', sourceKey: 'id', as: 'favorites', onDelete: 'CASCADE', onUpdate: 'NO ACTION' });
+    db.User.hasMany(db.MarketPost, { foreignKey: 'userId', sourceKey: 'id', as: 'marketPosts', onDelete: 'CASCADE', onUpdate: 'NO ACTION' });
+    db.User.hasMany(db.Order, { foreignKey: 'buyerId', sourceKey: 'id', as: 'boughtOrders', onDelete: 'CASCADE', onUpdate: 'NO ACTION' });
+    db.User.hasMany(db.RecommendHistory, { foreignKey: 'userId', sourceKey: 'id', as: 'recommendHistories', onDelete: 'SET NULL', onUpdate: 'NO ACTION' });
   }
 };

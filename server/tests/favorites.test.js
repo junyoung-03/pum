@@ -31,7 +31,8 @@ describe('찜 /api/favorites', () => {
     const res = await request(app).get('/api/favorites').set(bearer(token));
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(3);
-    expect(res.body.data.map((p) => p.id)).toContain('dior-sauvage-edp');
+    const added = res.body.data.find((f) => f.perfumeId === 'dior-sauvage-edp');
+    expect(added.perfume).toMatchObject({ id: 'dior-sauvage-edp', brand: 'DIOR' });
   });
 
   test('GET /:perfumeId/check 찜 여부', async () => {
@@ -44,7 +45,11 @@ describe('찜 /api/favorites', () => {
   test('GET /ranking 찜 많은 순 (MFK가 2명으로 1위)', async () => {
     const res = await request(app).get('/api/favorites/ranking');
     expect(res.status).toBe(200);
-    expect(res.body.data[0]).toMatchObject({ rank: 1, id: 'mfk-baccarat-rouge-540', favoriteCount: 2 });
+    expect(res.body.data[0]).toMatchObject({
+      perfumeId: 'mfk-baccarat-rouge-540',
+      favoriteCount: 2,
+      perfume: { name: 'Baccarat Rouge 540' },
+    });
   });
 
   describe('★ DELETE /:perfumeId 찜 해제', () => {

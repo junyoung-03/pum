@@ -185,8 +185,8 @@ const GROUPS = [
   ]},
   { name: '6. 거래 /api/orders', items: [
     { m: 'POST', path: '/api/orders', name: '구매 신청', core: true, auth: 'user', body: { postId: 1, name: '홍길동', phone: '010-9876-5432', address: '부산광역시 해운대구 센텀로 45, 202호' }, desc: '판매글 1은 향수러버의 글입니다. 데일리향수(daily)로 로그인해서 구매해 보세요. 성공하면 판매글이 예약중이 되고 새 거래 id가 {orderId}에 저장됩니다.' },
-    { m: 'GET', path: '/api/orders/my', name: '내 구매 목록', auth: 'user', desc: '구매자 본인이므로 배송 정보(receiver)가 포함됩니다.' },
-    { m: 'GET', path: '/api/orders/sales', name: '내 판매 거래 목록', auth: 'user', desc: '판매자에게는 구매자 개인정보가 보이지 않습니다 (receiver: null).' },
+    { m: 'GET', path: '/api/orders/my', name: '내 구매 목록', auth: 'user', desc: '구매자 본인이므로 배송 정보(receiverName, receiverPhone, address)가 포함됩니다.' },
+    { m: 'GET', path: '/api/orders/sales', name: '내 판매 거래 목록', auth: 'user', desc: '판매자에게는 구매자 개인정보가 보이지 않습니다.' },
     { m: 'GET', path: '/api/orders?stage=판매자발송', name: '전체 거래 목록', auth: 'admin', desc: 'stage: 구매신청, 판매자발송, 인수완료, 인계완료 (생략하면 전체)' },
     { m: 'GET', path: '/api/orders/{orderId}', name: '거래 상세', auth: 'user', desc: '구매자·판매자·관리자만 조회할 수 있고, 개인정보는 구매자·관리자에게만 보입니다.' },
     { m: 'PATCH', path: '/api/orders/{orderId}/ship', name: '판매자 발송 (판매자만)', auth: 'user', desc: '판매자(향수러버, lover)로 로그인해서 실행합니다. 구매신청 → 판매자발송' },

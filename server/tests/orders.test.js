@@ -14,6 +14,10 @@ describe('거래 /api/orders', () => {
   let orderId;
 
   const receiver = { name: '홍길동', phone: '010-9876-5432', address: '부산광역시 해운대구 센텀로 45, 202호' };
+  // 응답에 들어 있는 배송 정보 (구매자·관리자에게만)
+  const shipping = { receiverName: receiver.name, receiverPhone: receiver.phone, address: receiver.address };
+  const expectNoShipping = (order) =>
+    Object.keys(shipping).forEach((field) => expect(order).not.toHaveProperty(field));
 
   beforeAll(async () => {
     adminToken = await login('admin');
@@ -32,10 +36,9 @@ describe('거래 /api/orders', () => {
       expect(res.body.data).toMatchObject({
         stage: '구매신청',
         price: 150000,
-        post: { id: 1, status: '예약중' },
-        seller: { nickname: '향수러버' },
+        post: { id: 1, status: '예약중', seller: { nickname: '향수러버' } },
         buyer: { nickname: '데일리향수' },
-        receiver,
+        ...shipping,
       });
       orderId = res.body.data.id;
 
@@ -71,19 +74,19 @@ describe('거래 /api/orders', () => {
   test('GET /my 내 구매 목록 (배송 정보 포함) / GET /sales 내 판매 거래 (구매자 개인정보 없음)', async () => {
     const my = await request(app).get('/api/orders/my').set(bearer(dailyToken));
     expect(my.status).toBe(200);
-    expect(my.body.data.find((o) => o.id === orderId).receiver).toEqual(receiver);
+    expect(my.body.data.find((o) => o.id === orderId)).toMatchObject(shipping);
 
     const sales = await request(app).get('/api/orders/sales').set(bearer(loverToken));
     expect(sales.status).toBe(200);
     const sale = sales.body.data.find((o) => o.id === orderId);
     expect(sale.buyer.nickname).toBe('데일리향수');
-    expect(sale.receiver).toBeNull();
+    expectNoShipping(sale);
   });
 
   test('GET /:id 상세 → 판매자는 개인정보 없음, 구매자·관리자는 있음, 관계없는 회원 403', async () => {
-    expect((await request(app).get(`/api/orders/${orderId}`).set(bearer(loverToken))).body.data.receiver).toBeNull();
-    expect((await request(app).get(`/api/orders/${orderId}`).set(bearer(dailyToken))).body.data.receiver).toEqual(receiver);
-    expect((await request(app).get(`/api/orders/${orderId}`).set(bearer(adminToken))).body.data.receiver).toEqual(receiver);
+    expectNoShipping((await request(app).get(`/api/orders/${orderId}`).set(bearer(loverToken))).body.data);
+    expect((await request(app).get(`/api/orders/${orderId}`).set(bearer(dailyToken))).body.data).toMatchObject(shipping);
+    expect((await request(app).get(`/api/orders/${orderId}`).set(bearer(adminToken))).body.data).toMatchObject(shipping);
     expect((await request(app).get(`/api/orders/${orderId}`).set(bearer(strangerToken))).status).toBe(403);
     expect((await request(app).get('/api/orders/999').set(bearer(adminToken))).status).toBe(404);
   });
@@ -94,6 +97,7 @@ describe('거래 /api/orders', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.stage).toBe('판매자발송');
     expect(res.body.data.shippedAt).not.toBeNull();
+    expectNoShipping(res.body.data);
     // 다시 발송하면 409
     expect((await request(app).patch(`/api/orders/${orderId}/ship`).set(bearer(loverToken))).status).toBe(409);
   });
@@ -127,7 +131,7 @@ describe('거래 /api/orders', () => {
     test('200 구매자에게 발송 → 인계완료 + 판매글 판매완료', async () => {
       const res = await request(app).patch(`/api/orders/${orderId}/deliver`).set(bearer(adminToken));
       expect(res.status).toBe(200);
-      expect(res.body.data).toMatchObject({ stage: '인계완료', post: { status: '판매완료' }, receiver });
+      expect(res.body.data).toMatchObject({ stage: '인계완료', post: { status: '판매완료' }, ...shipping });
       expect((await request(app).get('/api/market/1')).body.data.status).toBe('판매완료');
     });
 

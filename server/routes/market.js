@@ -149,14 +149,12 @@ router.post(
  * - Method / Path: PUT /api/market/:id
  * - Auth: 로그인 필수 (작성자 본인만)
  * - Request Body: 수정할 필드들
- * - 핵심 로직: 본인 글 검증, 구매 신청이 들어온 글은 수정 차단(409), category를 null로 비우는 수정도 완벽 지원
+ * - 핵심 로직: 입력값 검사 후 모델에서 본인 글 확인(403)·구매 신청 확인(409), category를 null로 비우는 수정도 완벽 지원
  */
 router.put(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    const post = await MarketPost.findOwn(req.params.id, req.user.id);
-    post.assertNoOrder();
     if (req.body.status !== undefined) {
       throw new HttpError(400, '거래 상태는 PATCH /api/market/:id/status로 변경해 주세요.');
     }
@@ -179,8 +177,6 @@ router.patch(
   asyncHandler(async (req, res) => {
     const { status } = req.body;
     if (!MARKET_STATUS.includes(status)) throw new HttpError(400, `status는 ${MARKET_STATUS.join(', ')} 중 하나여야 합니다.`);
-    const post = await MarketPost.findOwn(req.params.id, req.user.id);
-    post.assertNoOrder();
     const updated = await MarketPost.changeOwn(req.params.id, req.user.id, { status });
     ok(res, updated);
   })
@@ -196,8 +192,6 @@ router.delete(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    const post = await MarketPost.findOwn(req.params.id, req.user.id);
-    post.assertNoOrder();
     await MarketPost.removeOwn(req.params.id, req.user.id);
     ok(res, { id: Number(req.params.id), message: '판매글이 삭제되었습니다.' });
   })

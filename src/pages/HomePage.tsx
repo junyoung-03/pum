@@ -128,14 +128,14 @@ export default function HomePage() {
               <p>회원들이 가장 많이 찜한 향수 TOP {ranking.length}</p>
             </div>
             <ol className="ranking-list">
-              {ranking.map((item) => (
-                <li key={item.id}>
-                  <Link to={`/detail/${item.id}`} className="ranking-item">
-                    <span className="ranking-number">{item.rank}</span>
-                    <PerfumeImage perfume={item} className="ranking-image" size="small" />
+              {ranking.map((item, index) => (
+                <li key={item.perfumeId}>
+                  <Link to={`/detail/${item.perfumeId}`} className="ranking-item">
+                    <span className="ranking-number">{index + 1}</span>
+                    <PerfumeImage perfume={item.perfume} className="ranking-image" size="small" />
                     <span className="ranking-info">
-                      <span className="ranking-brand">{item.brand}</span>
-                      <span className="ranking-name">{item.name}</span>
+                      <span className="ranking-brand">{item.perfume.brand}</span>
+                      <span className="ranking-name">{item.perfume.name}</span>
                     </span>
                     <span className="ranking-count">♥ {item.favoriteCount}</span>
                   </Link>

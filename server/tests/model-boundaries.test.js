@@ -3,19 +3,37 @@ const { app, request, login, bearer } = require('./helpers');
 
 const receiver = { receiverName: '테스트', receiverPhone: '010-1234-5678', address: '서울특별시 테스트 주소' };
 
-test('판매자 응답은 연관 객체를 유지하고 배송 원본 필드를 숨긴다', async () => {
+test('거래 응답은 include 객체를 그대로 쓰고, 판매자에게는 배송 정보를 숨긴다', async () => {
   const order = await Order.findDetail(1);
-  const response = order.toResponse(false);
-  expect(response.receiver).toBeNull();
-  for (const key of ['receiverName', 'receiverPhone', 'address', 'buyerId', 'postId']) {
-    expect(response).not.toHaveProperty(key);
-  }
-  expect(response.seller).toHaveProperty('nickname');
-  expect(order.post.seller).toBeDefined();
-  expect(order.toResponse(true).receiver).toHaveProperty('address');
+  expect(order.toJSON()).toMatchObject({
+    post: { id: 2, seller: { nickname: '데일리향수' } },
+    buyer: { nickname: '향수러버' },
+    receiverName: '김향수',
+  });
+  const hidden = JSON.parse(JSON.stringify(order.hideReceiver()));
+  for (const key of ['receiverName', 'receiverPhone', 'address']) expect(hidden).not.toHaveProperty(key);
+  expect(hidden.post.seller).toHaveProperty('nickname');
+
+  const [sale] = await Order.listSales(3);
+  for (const key of ['receiverName', 'receiverPhone', 'address']) expect(sale.toJSON()).not.toHaveProperty(key);
+
   const user = await User.findByPk(2);
   expect(user.password).toBeDefined();
   expect(user.toJSON()).not.toHaveProperty('password');
+});
+
+test('판매글 저장 실패 시 거래 단계 변경과 취소도 롤백된다', async () => {
+  const hookName = 'testStageRollback';
+  await Order.update({ stage: '인수완료' }, { where: { id: 1 } });
+  MarketPost.addHook('beforeUpdate', hookName, () => { throw new Error('forced failure'); });
+  try {
+    await expect(Order.deliver(1)).rejects.toThrow('forced failure');
+    await expect(Order.cancel(1, { id: 1, role: 'admin' })).rejects.toThrow('forced failure');
+  } finally {
+    MarketPost.removeHook('beforeUpdate', hookName);
+  }
+  expect(await Order.findByPk(1)).toMatchObject({ stage: '인수완료', deliveredAt: null });
+  expect((await MarketPost.findByPk(2)).status).toBe('예약중');
 });
 
 test('판매글 저장 실패 시 주문 생성도 롤백된다', async () => {

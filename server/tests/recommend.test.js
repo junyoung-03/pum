@@ -62,7 +62,7 @@ describe('추천 /api/recommend', () => {
     const list = await request(app).get('/api/recommend/history').set(bearer(loverToken));
     expect(list.status).toBe(200);
     expect(list.body.data).toHaveLength(1);
-    expect(list.body.data[0].answers.category).toBe('Woody');
+    expect(list.body.data[0]).toMatchObject({ category: 'Woody', perfume: { id: 'le-labo-santal-33' } });
 
     const detail = await request(app).get(`/api/recommend/history/${historyId}`).set(bearer(loverToken));
     expect(detail.status).toBe(200);
@@ -80,6 +80,7 @@ describe('추천 /api/recommend', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.totalCount).toBe(3);
     expect(res.body.data.topAnswers.category[0]).toEqual({ value: 'Amber', count: 1 });
+    expect(res.body.data.topPerfumes[0]).toMatchObject({ count: 1, perfume: { id: res.body.data.topPerfumes[0].perfumeId } });
   });
 
   test('DELETE /history/:id 삭제 후 404', async () => {

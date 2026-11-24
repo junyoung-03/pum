@@ -1,3 +1,6 @@
+// .env를 먼저 읽어야 아래의 DB_* 환경변수가 적용됨 (config.js에서 dotenv 실행)
+require('../config');
+
 const Sequelize = require('sequelize');
 const User = require('./user');
 const Perfume = require('./perfume');

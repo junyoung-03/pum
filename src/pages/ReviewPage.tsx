@@ -285,9 +285,9 @@ export default function ReviewPage() {
                   <article key={review.id} className="review-card">
                     <div className="review-header">
                       <div className="review-author">
-                        <div className="author-avatar">{review.authorName.charAt(0).toUpperCase()}</div>
+                        <div className="author-avatar">{review.user.nickname.charAt(0).toUpperCase()}</div>
                         <div className="author-info">
-                          <p className="author-name">{review.authorName}</p>
+                          <p className="author-name">{review.user.nickname}</p>
                           <p className="review-date">{formatDate(review.createdAt)}</p>
                         </div>
                       </div>
@@ -305,7 +305,9 @@ export default function ReviewPage() {
                     </div>
                     <div className="review-perfume">
                       <span className="perfume-label">리뷰 향수</span>
-                      <span className="perfume-name">{review.perfumeName}</span>
+                      <span className="perfume-name">
+                        {review.perfume.brand} {review.perfume.name}
+                      </span>
                     </div>
 
                     {editingId === review.id ? (

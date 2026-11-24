@@ -21,11 +21,19 @@ describe('리뷰 /api/reviews', () => {
       expect(res.status).toBe(201);
       expect(res.body.data).toMatchObject({
         perfumeId: 'tom-ford-oud-wood',
-        perfumeName: 'TOM FORD Oud Wood',
-        authorName: '향수러버',
+        perfume: { id: 'tom-ford-oud-wood', brand: 'TOM FORD', name: 'Oud Wood' },
+        user: { nickname: '향수러버' },
         rating: 4,
       });
       reviewId = res.body.data.id;
+    });
+
+    test('409 같은 향수에 다시 작성', async () => {
+      const res = await request(app)
+        .post('/api/reviews')
+        .set(bearer(loverToken))
+        .send({ perfumeId: 'tom-ford-oud-wood', rating: 1, content: '두 번째 리뷰' });
+      expect(res.status).toBe(409);
     });
 
     test('401 로그인 없이 작성', async () => {
@@ -86,7 +94,7 @@ describe('리뷰 /api/reviews', () => {
     expect(other.status).toBe(403);
     const mine = await request(app).put(`/api/reviews/${reviewId}`).set(bearer(loverToken)).send({ rating: 5 });
     expect(mine.status).toBe(200);
-    expect(mine.body.data.rating).toBe(5);
+    expect(mine.body.data).toMatchObject({ rating: 5, user: { nickname: '향수러버' }, perfume: { name: 'Oud Wood' } });
   });
 
   test('DELETE /:id → 본인 삭제 200 후 조회 404', async () => {

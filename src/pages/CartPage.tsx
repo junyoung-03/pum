@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { api, errorMessage } from '../api/client';
 import { setFavorites } from '../data/store';
 import type { RootState } from '../data/store';
-import type { Perfume } from '../data/perfumeData';
+import type { Favorite, Perfume } from '../data/perfumeData';
 import useFavorite from '../data/useFavorite';
 import PerfumeItem from '../components/PerfumeItem';
 import LoginRequired from '../components/LoginRequired';
@@ -23,10 +23,10 @@ export default function CartPage() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    api<Perfume[]>('/favorites')
+    api<Favorite[]>('/favorites')
       .then(({ data }) => {
-        setFavoritePerfumes(data);
-        dispatch(setFavorites(data.map((p) => p.id)));
+        setFavoritePerfumes(data.map((favorite) => favorite.perfume));
+        dispatch(setFavorites(data.map((favorite) => favorite.perfumeId)));
       })
       .catch((err) => setError(errorMessage(err)))
       .finally(() => setLoading(false));

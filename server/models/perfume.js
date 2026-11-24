@@ -154,14 +154,11 @@ module.exports = class Perfume extends Sequelize.Model {
   }
 
   static similarityScore(base, other) {
-    const baseMood = Array.isArray(base.mood) ? base.mood : [];
-    const baseSeason = Array.isArray(base.season) ? base.season : [];
-    const otherMood = Array.isArray(other.mood) ? other.mood : [];
-    const otherSeason = Array.isArray(other.season) ? other.season : [];
+    // mood·season은 JSON NOT NULL 컬럼이라 항상 배열
     let score = 0;
     if (other.category === base.category) score += 3;
-    score += otherMood.filter((m) => baseMood.includes(m)).length;
-    score += otherSeason.filter((s) => baseSeason.includes(s)).length * 0.5;
+    score += other.mood.filter((m) => base.mood.includes(m)).length;
+    score += other.season.filter((s) => base.season.includes(s)).length * 0.5;
     return score;
   }
 
@@ -171,13 +168,10 @@ module.exports = class Perfume extends Sequelize.Model {
       attributes: ['id', 'brand', 'name', 'image', 'category', 'mood', 'season'],
       where: { id: { [Sequelize.Op.ne]: base.id } },
     });
-    const result = others.map((perfume) => {
-      const data = perfume.toJSON();
-      data.similarity = this.similarityScore(base, perfume);
-      delete data.mood;
-      delete data.season;
-      return data;
-    }).sort((a, b) => b.similarity - a.similarity || a.id.localeCompare(b.id)).slice(0, limit);
+    others.forEach((perfume) => perfume.setDataValue('similarity', this.similarityScore(base, perfume)));
+    const result = others
+      .sort((a, b) => b.get('similarity') - a.get('similarity') || a.id.localeCompare(b.id))
+      .slice(0, limit);
     return { result, base: { id: base.id, brand: base.brand, name: base.name } };
   }
 
@@ -199,9 +193,10 @@ module.exports = class Perfume extends Sequelize.Model {
   }
 
   static associate(db) {
-    db.Perfume.hasMany(db.Review, { foreignKey: 'perfumeId', as: 'reviews', onDelete: 'CASCADE' });
-    db.Perfume.hasMany(db.Favorite, { foreignKey: 'perfumeId', as: 'favorites', onDelete: 'CASCADE' });
-    db.Perfume.hasMany(db.MarketPost, { foreignKey: 'perfumeId', as: 'marketPosts', onDelete: 'SET NULL' });
-    db.Perfume.hasMany(db.RecommendHistory, { foreignKey: 'perfumeId', as: 'recommendHistories', onDelete: 'SET NULL' });
+    // onDelete·onUpdate는 db/schema.sql의 외래키 규칙과 같게 유지
+    db.Perfume.hasMany(db.Review, { foreignKey: 'perfumeId', sourceKey: 'id', as: 'reviews', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+    db.Perfume.hasMany(db.Favorite, { foreignKey: 'perfumeId', sourceKey: 'id', as: 'favorites', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+    db.Perfume.hasMany(db.MarketPost, { foreignKey: 'perfumeId', sourceKey: 'id', as: 'marketPosts', onDelete: 'SET NULL', onUpdate: 'CASCADE' });
+    db.Perfume.hasMany(db.RecommendHistory, { foreignKey: 'perfumeId', sourceKey: 'id', as: 'recommendHistories', onDelete: 'SET NULL', onUpdate: 'CASCADE' });
   }
 };

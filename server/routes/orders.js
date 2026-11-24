@@ -55,7 +55,7 @@ router.post(
     const receiver = checkReceiver(req.body);
 
     const created = await Order.purchase(postId, req.user.id, receiver);
-    ok(res, created.toResponse(true), 201);
+    ok(res, created, 201);
   })
 );
 
@@ -63,14 +63,14 @@ router.post(
  * [기능 API] 내 구매 목록 조회
  * - Method / Path: GET /api/orders/my
  * - Auth: 로그인 필수
- * - 핵심 로직: 로그인한 회원이 구매 신청한 모든 거래 목록 조회 (본인이므로 배송 정보 receiver 포함)
+ * - 핵심 로직: 로그인한 회원이 구매 신청한 모든 거래 목록 조회 (본인이므로 배송 정보 포함)
  */
 router.get(
   '/my',
   auth,
   asyncHandler(async (req, res) => {
     const orders = await Order.listPurchases(req.user.id);
-    ok(res, orders.map((o) => o.toResponse(true)));
+    ok(res, orders);
   })
 );
 
@@ -78,14 +78,14 @@ router.get(
  * [기능 API] 내 판매 거래 목록 조회
  * - Method / Path: GET /api/orders/sales
  * - Auth: 로그인 필수
- * - 핵심 로직: 내 판매글에 들어온 거래 목록 조회 (개인정보 보호를 위해 구매자 배송 정보는 receiver: null 마스킹)
+ * - 핵심 로직: 내 판매글에 들어온 거래 목록 조회 (개인정보 보호를 위해 구매자 배송 정보 컬럼은 조회하지 않음)
  */
 router.get(
   '/sales',
   auth,
   asyncHandler(async (req, res) => {
     const orders = await Order.listSales(req.user.id);
-    ok(res, orders.map((o) => o.toResponse(false)));
+    ok(res, orders);
   })
 );
 
@@ -107,7 +107,7 @@ router.get(
     }
 
     const orders = await Order.listAll(stage);
-    ok(res, orders.map((o) => o.toResponse(true)));
+    ok(res, orders);
   })
 );
 
@@ -124,9 +124,9 @@ router.get(
     const order = await Order.findDetail(req.params.id);
     const isAdmin = req.user.role === 'admin';
     const isBuyer = order.buyerId === req.user.id;
-    const isSeller = order.post && order.post.userId === req.user.id;
+    const isSeller = order.post.userId === req.user.id;
     if (!isAdmin && !isBuyer && !isSeller) throw new HttpError(403, '거래 당사자와 관리자만 볼 수 있습니다.');
-    ok(res, order.toResponse(isAdmin || isBuyer));
+    ok(res, isAdmin || isBuyer ? order : order.hideReceiver());
   })
 );
 
@@ -140,11 +140,8 @@ router.patch(
   '/:id/ship',
   auth,
   asyncHandler(async (req, res) => {
-    const order = await Order.findDetail(req.params.id);
-    if (!order.post || order.post.userId !== req.user.id) throw new HttpError(403, '판매자 본인만 발송 처리할 수 있습니다.');
-    await Order.moveStage(order.id, '구매신청', '판매자발송', 'shippedAt');
-    const updated = await Order.findDetail(order.id);
-    ok(res, updated.toResponse(false));
+    const order = await Order.ship(req.params.id, req.user.id);
+    ok(res, order.hideReceiver());
   })
 );
 
@@ -158,10 +155,7 @@ router.patch(
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    const order = await Order.findDetail(req.params.id);
-    await Order.moveStage(order.id, '판매자발송', '인수완료', 'receivedAt');
-    const updated = await Order.findDetail(order.id);
-    ok(res, updated.toResponse(true));
+    ok(res, await Order.receive(req.params.id));
   })
 );
 
@@ -175,10 +169,7 @@ router.patch(
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    const order = await Order.findDetail(req.params.id);
-    await Order.moveStage(order.id, '인수완료', '인계완료', 'deliveredAt', '판매완료');
-    const updated = await Order.findDetail(order.id);
-    ok(res, updated.toResponse(true));
+    ok(res, await Order.deliver(req.params.id));
   })
 );
 
@@ -193,10 +184,7 @@ router.delete(
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    const order = await Order.findDetail(req.params.id);
-    await Order.moveStage(order.id, '인수완료', '판매자발송', 'receivedAt', null, true);
-    const updated = await Order.findDetail(order.id);
-    ok(res, updated.toResponse(true));
+    ok(res, await Order.undoReceive(req.params.id));
   })
 );
 
@@ -211,10 +199,7 @@ router.delete(
   auth,
   adminOnly,
   asyncHandler(async (req, res) => {
-    const order = await Order.findDetail(req.params.id);
-    await Order.moveStage(order.id, '인계완료', '인수완료', 'deliveredAt', '예약중', true);
-    const updated = await Order.findDetail(order.id);
-    ok(res, updated.toResponse(true));
+    ok(res, await Order.undoDeliver(req.params.id));
   })
 );
 
@@ -227,10 +212,8 @@ router.delete(
   '/:id',
   auth,
   asyncHandler(async (req, res) => {
-    const order = await Order.findDetail(req.params.id);
-    await Order.cancel(order.id, req.user);
-
-    ok(res, { id: order.id, message: '거래가 취소되었습니다. 판매글이 다시 판매중으로 바뀌었습니다.' });
+    await Order.cancel(req.params.id, req.user);
+    ok(res, { id: Number(req.params.id), message: '거래가 취소되었습니다. 판매글이 다시 판매중으로 바뀌었습니다.' });
   })
 );
 

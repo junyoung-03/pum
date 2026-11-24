@@ -17,36 +17,21 @@ const { CATEGORIES, MOODS, SEASONS, PURPOSES, PRICE_LEVELS } = require('../utils
 
 const router = express.Router();
 
-const ARRAY_FIELDS = {
-  mood: ['mood', MOODS],
-  moodTags: ['moodTags', null],
-  season: ['season', SEASONS],
-  purpose: ['purpose', PURPOSES],
-  topNote: ['topNote', null],
-  middleNote: ['middleNote', null],
-  baseNote: ['baseNote', null],
-};
-const TEXT_FIELDS = {
-  name: ['name', 100],
-  brand: ['brand', 50],
-  noteFamily: ['noteFamily', 100],
-  description: ['description', 2000],
-  highlight: ['highlight', 255],
-  image: ['image', 255],
-  color: ['color', 20],
-  shortCopy: ['shortCopy', 255],
-};
+// 배열 필드: 허용 값 목록 (null이면 자유 입력)
+const ARRAY_FIELDS = { mood: MOODS, moodTags: null, season: SEASONS, purpose: PURPOSES, topNote: null, middleNote: null, baseNote: null };
+// 문자열 필드: 최대 길이
+const TEXT_FIELDS = { name: 100, brand: 50, noteFamily: 100, description: 2000, highlight: 255, image: 255, color: 20, shortCopy: 255 };
 
 function bodyToColumns(body) {
   const cols = {};
-  for (const [field, [col, max]] of Object.entries(TEXT_FIELDS)) {
+  for (const [field, max] of Object.entries(TEXT_FIELDS)) {
     if (body[field] === undefined) continue;
     if (typeof body[field] !== 'string' || body[field].length > max) {
       throw new HttpError(400, `${field}는 ${max}자 이하 문자열이어야 합니다.`);
     }
-    cols[col] = body[field].trim();
+    cols[field] = body[field].trim();
   }
-  for (const [field, [col, allowed]] of Object.entries(ARRAY_FIELDS)) {
+  for (const [field, allowed] of Object.entries(ARRAY_FIELDS)) {
     if (body[field] === undefined) continue;
     const arr = body[field];
     if (!Array.isArray(arr) || arr.some((v) => typeof v !== 'string')) {
@@ -55,7 +40,7 @@ function bodyToColumns(body) {
     if (allowed && arr.some((v) => !allowed.includes(v))) {
       throw new HttpError(400, `${field} 값은 ${allowed.join(', ')} 중에서 선택해 주세요.`);
     }
-    cols[col] = arr;
+    cols[field] = arr;
   }
   if (body.category !== undefined) {
     if (!CATEGORIES.includes(body.category)) throw new HttpError(400, `category는 ${CATEGORIES.join(', ')} 중 하나여야 합니다.`);
@@ -160,11 +145,8 @@ router.post(
     requireText(req.body.brand, 'brand', 50);
     if (req.body.category === undefined) throw new HttpError(400, 'category를 입력해 주세요.');
 
+    // 생략한 배열 필드는 모델의 defaultValue([])가 적용됨
     const cols = bodyToColumns(req.body);
-    for (const field of Object.keys(ARRAY_FIELDS)) {
-      if (cols[field] === undefined) cols[field] = [];
-    }
-
     const created = await Perfume.createPerfume(id, cols);
     ok(res, created, 201);
   })

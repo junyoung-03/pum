@@ -8,9 +8,6 @@ const { User, RevokedToken } = require('../models');
 const { jwt: jwtConfig } = require('../config');
 const { HttpError, asyncHandler } = require('../utils/http');
 
-// 로그아웃·탈퇴한 토큰의 고유 id(jti) 목록 (DB 영속 저장 + 인메모리 캐시)
-const revokedTokensCache = new Set();
-
 // jwtid: 토큰마다 고유 id를 붙여서, 같은 초에 발급된 토큰도 서로 구분되게 함
 const signToken = (user) =>
   jwt.sign({ id: user.id, role: user.role }, jwtConfig.secret, {
@@ -32,45 +29,27 @@ async function verify(token) {
     throw new HttpError(401, '유효하지 않거나 만료된 토큰입니다.');
   }
 
-  if (revokedTokensCache.has(payload.jti)) {
-    throw new HttpError(401, '로그아웃된 토큰입니다. 다시 로그인해 주세요.');
-  }
-
-  try {
-    const revoked = await RevokedToken.findByPk(payload.jti);
-    if (revoked) {
-      revokedTokensCache.add(payload.jti);
-      throw new HttpError(401, '로그아웃된 토큰입니다. 다시 로그인해 주세요.');
-    }
-  } catch (err) {
-    if (err instanceof HttpError) throw err;
-  }
+  // 로그아웃·탈퇴한 토큰인지 DB(revoked_tokens)에서 확인
+  const revoked = await RevokedToken.findByPk(payload.jti);
+  if (revoked) throw new HttpError(401, '로그아웃된 토큰입니다. 다시 로그인해 주세요.');
 
   const user = await User.findByPk(payload.id, {
     attributes: ['id', 'email', 'nickname', 'role'],
   });
   if (!user) throw new HttpError(401, '존재하지 않는 회원입니다.');
-  return { user: user.get({ plain: true }), jti: payload.jti, exp: payload.exp };
+  return { user: user.get({ plain: true }), tokenId: payload.jti, tokenExp: new Date(payload.exp * 1000) };
 }
 
 const auth = asyncHandler(async (req, res, next) => {
   const token = getToken(req);
   if (!token) throw new HttpError(401, '로그인이 필요합니다.');
-  const { user, jti, exp } = await verify(token);
-  req.user = user;
-  req.tokenId = jti;
-  req.tokenExp = exp ? new Date(exp * 1000) : null;
+  Object.assign(req, await verify(token));
   next();
 });
 
 const optionalAuth = asyncHandler(async (req, res, next) => {
   const token = getToken(req);
-  if (token) {
-    const { user, jti, exp } = await verify(token);
-    req.user = user;
-    req.tokenId = jti;
-    req.tokenExp = exp ? new Date(exp * 1000) : null;
-  }
+  if (token) Object.assign(req, await verify(token));
   next();
 });
 
@@ -79,17 +58,7 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
-const revokeToken = async (tokenId, expiresAt) => {
-  revokedTokensCache.add(tokenId);
-  try {
-    const expDate = expiresAt instanceof Date ? expiresAt : new Date(Date.now() + 2 * 60 * 60 * 1000);
-    await RevokedToken.upsert({
-      tokenId,
-      expiresAt: expDate,
-    });
-  } catch (err) {
-    console.error('Failed to save revoked token to DB:', err.message);
-  }
-};
+// 로그아웃·탈퇴한 토큰을 DB에 저장해서 다시 쓰지 못하게 함
+const revokeToken = (tokenId, expiresAt) => RevokedToken.upsert({ tokenId, expiresAt });
 
 module.exports = { auth, optionalAuth, adminOnly, signToken, revokeToken };

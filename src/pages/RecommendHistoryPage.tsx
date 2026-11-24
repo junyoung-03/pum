@@ -101,7 +101,7 @@ export default function RecommendHistoryPage() {
                       )}
                     </h3>
                     <div className="selection-tags">
-                      {Object.values(item.answers)
+                      {[item.mood, item.season, item.category, item.purpose]
                         .filter(Boolean)
                         .map((v) => (
                           <span key={v}>{v}</span>

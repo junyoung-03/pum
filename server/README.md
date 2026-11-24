@@ -63,7 +63,6 @@ server/
 ├─ server.js           서버 실행 (app.listen)
 ├─ config.js           .env 읽기 (테스트 시 DB_NAME_TEST 사용)
 ├─ db/
-│  ├─ pool.js          MySQL 커넥션 풀
 │  ├─ init.js          DB 초기화 스크립트
 │  ├─ schema.sql       테이블 생성
 │  └─ seed.sql         초기 데이터 (향수 8종, 설문, 테스트 계정, 샘플 리뷰·찜·판매글·거래)
@@ -195,13 +194,16 @@ server/
 
 ## 모델과 라우터 역할 분리
 
-- 주문의 연관 조회, 구매 신청, 거래 취소, 단계 전환과 관리형 트랜잭션은 `models/order.js`에서 관리합니다.
+- 주문의 연관 조회, 구매 신청, 거래 취소, 단계 전환(`ship`·`receive`·`deliver`·`undoReceive`·`undoDeliver`)과 관리형 트랜잭션은 `models/order.js`에서 관리합니다.
 - 판매글의 연관 조회, 목록 조회, 생성·변경·삭제는 `models/marketPost.js`에서 관리합니다.
 - 라우터는 요청 값 검증, 접근 권한 확인, 모델 메서드 호출 및 HTTP 응답을 담당합니다.
-- 주문의 `post`, `buyer`, 판매글의 `seller`, `order`는 Sequelize `include`로 구성합니다. 주문의 `toResponse`는 기존 API의 `seller` 위치와 `receiver` 형식을 유지하고 배송 개인정보를 제한하는 용도로만 사용합니다.
-- 회원 비밀번호는 모델의 JSON 직렬화에서 제외하며, 추천 기록의 답변 그룹도 모델에서 직렬화합니다.
+- 연관 데이터는 Sequelize `include` 결과를 그대로 응답합니다. 평면 데이터를 손으로 조립하지 않습니다.
+  - 거래: `post`(안에 `seller`), `buyer`, `receiverName`·`receiverPhone`·`address` (배송 정보는 구매자·관리자에게만)
+  - 리뷰: `user`, `perfume` / 찜 목록·순위와 추천 통계: `perfume` / 추천 기록: `mood`·`season`·`category`·`purpose`, `perfume`
+- 회원 비밀번호는 모델의 JSON 직렬화에서 제외합니다.
 - 향수 검색·유사도 계산·CRUD는 `Perfume`, 리뷰의 연관 조회·통계·작성 제한은 `Review`, 찜의 순위·목록·변경은 `Favorite` 모델에서 처리합니다.
 - 설문 조회는 `RecommendQuestion`, 추천 계산·기록 저장·통계·본인 기록 관리는 `RecommendHistory`, 회원 가입·암호 확인·프로필 변경은 `User` 모델에서 처리합니다.
 - 모든 API 라우터에서 Sequelize 쿼리 작성, 직접 CRUD 호출 및 집계·추천 계산을 제거했습니다. 모델은 Express의 req/res 객체에 의존하지 않습니다.
-- 순위·추천 점수 같은 파생 결과와 기존 API 형식 호환용 직렬화는 모델에서 처리하며, 연관 테이블 객체 자체는 `include`로 조립합니다.
+- 본인 확인·거래 진행 여부는 모델에서 한 번만 검사하고, 라우터는 같은 조회를 반복하지 않습니다.
+- 모델의 외래키(onDelete·onUpdate)·중복 제약은 `db/schema.sql`과 같습니다. `tests/schema.test.js`가 두 정의를 비교합니다.
 - 초기화용 `db/schema.sql`, `db/seed.sql`은 API 라우터의 Raw SQL과 별개입니다.
