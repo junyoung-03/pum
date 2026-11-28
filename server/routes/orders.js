@@ -20,42 +20,22 @@
 const express = require('express');
 const { Order } = require('../models');
 const { auth, adminOnly } = require('../middlewares/auth');
-const { HttpError, asyncHandler, ok, requireText } = require('../utils/http');
-const { ORDER_STAGES } = require('../utils/constants');
+const { HttpError, asyncHandler, ok } = require('../utils/http');
+const { validatePurchase, validateOrderStageQuery } = require('../validators/orders');
 
 const router = express.Router();
 
-const PHONE_RE = /^01[016789]-?\d{3,4}-?\d{4}$/;
-
-// 구매 신청 본문 검사
-function checkReceiver(body) {
-  const name = requireText(body.name, '받는 사람 이름(name)', 30);
-  const phone = requireText(body.phone, '전화번호(phone)', 20);
-  if (!PHONE_RE.test(phone)) throw new HttpError(400, '전화번호는 010-1234-5678 형식으로 입력해 주세요.');
-  const address = requireText(body.address, '배송주소(address)', 200);
-  if (address.length < 5) throw new HttpError(400, '배송주소를 정확히 입력해 주세요.');
-  return { receiverName: name, receiverPhone: phone, address };
-}
-
 /**
- * [핵심 API 1] 구매 신청 (중고거래 주문 생성 및 판매글 예약)
+ * [핵심 API 1] 구매 신청 (중고거래 주문 생성 및 모의 결제, 판매글 예약)
  * - Method / Path: POST /api/orders
- * - Request Body: { postId, name, phone, address }
- * - 핵심 로직 & 동시성 제어:
- *   1) Sequelize lock: t.LOCK.UPDATE로 판매글 레코드를 잠가 동시 구매 시 1명만 성공하도록 보장
- *   2) 본인 글 구매 차단(403), 이미 거래 중인 글 차단(409)
- *   3) 트랜잭션으로 주문 생성과 판매글 상태 변경('예약중')을 원자적으로 처리
  */
 router.post(
   '/',
   auth,
+  validatePurchase,
   asyncHandler(async (req, res) => {
-    const postId = Number(req.body.postId);
-    if (!Number.isInteger(postId) || postId < 1) throw new HttpError(400, '구매할 판매글(postId)을 선택해 주세요.');
-    const receiver = checkReceiver(req.body);
-    const { paymentMethod, amount } = req.body;
-
-    const created = await Order.purchase(postId, req.user.id, receiver, { method: paymentMethod, amount });
+    const { postId, receiver, paymentInfo } = req.validated;
+    const created = await Order.purchase(postId, req.user.id, receiver, paymentInfo);
     ok(res, created, 201);
   })
 );
@@ -101,13 +81,9 @@ router.get(
   '/',
   auth,
   adminOnly,
+  validateOrderStageQuery,
   asyncHandler(async (req, res) => {
-    const { stage } = req.query;
-    if (stage && !ORDER_STAGES.includes(stage)) {
-      throw new HttpError(400, `stage는 ${ORDER_STAGES.join(', ')} 중 하나여야 합니다.`);
-    }
-
-    const orders = await Order.listAll(stage);
+    const orders = await Order.listAll(req.validatedStage);
     ok(res, orders);
   })
 );
