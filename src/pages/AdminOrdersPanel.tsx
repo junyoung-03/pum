@@ -142,6 +142,7 @@ export default function AdminOrdersPanel({
                     {title(o)}
                     <p className="order-item-meta">
                       거래 #{o.id} · {formatPrice(o.price)} · 판매자 {o.post.seller.nickname} → 구매자 {o.buyer.nickname}
+                      {o.payment && ` · ${o.payment.method}(${o.payment.status}, ${o.payment.merchantUid})`}
                     </p>
                     <p className="order-item-meta">구매 신청 {fmt(o.createdAt)} · 판매자 발송 {fmt(o.shippedAt)}</p>
                     <div className="order-actions">

@@ -53,7 +53,7 @@ describe('모델과 schema.sql 일치', () => {
   });
 
   test('외래키 (참조 대상, ON DELETE, ON UPDATE)', () => {
-    expect(bySchema.foreignKeys).toHaveLength(10);
+    expect(bySchema.foreignKeys).toHaveLength(11);
     expect(byModels.foreignKeys).toEqual(bySchema.foreignKeys);
   });
 

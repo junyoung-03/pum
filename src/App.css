@@ -3090,3 +3090,81 @@ input, select, textarea {
 .order-list .receiver-box {
   margin-top: var(--space-sm);
 }
+
+/* 모의 결제 모달 (2단계) */
+.payment-methods-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.payment-method-btn {
+  padding: 12px 10px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text);
+  background: var(--color-white);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.payment-method-btn:hover {
+  border-color: var(--color-accent);
+}
+
+.payment-method-btn.active {
+  color: var(--color-accent);
+  background: rgba(139, 108, 76, 0.08);
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+
+.payment-summary-box {
+  padding: var(--space-md);
+  margin: var(--space-md) 0;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.payment-summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.payment-summary-row.total {
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+.payment-summary-row.total strong {
+  color: var(--color-accent);
+}
+
+.payment-agree-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--space-md);
+  font-size: 0.84rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.modal-actions-row {
+  display: flex;
+  gap: 10px;
+}
+
+.modal-actions-row > button:first-child {
+  flex: 0 0 90px;
+}

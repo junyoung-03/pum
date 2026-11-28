@@ -113,6 +113,7 @@ export default function MyOrdersSection() {
                     </Link>
                     <p className="order-item-meta">
                       {formatPrice(o.price)} · 판매자 {o.post.seller.nickname} · 신청 {formatDate(o.createdAt)}
+                      {o.payment && ` · ${o.payment.method} (${o.payment.status}) · ${o.payment.merchantUid}`}
                     </p>
                   </div>
                   {o.stage === '구매신청' && (

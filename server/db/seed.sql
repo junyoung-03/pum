@@ -51,3 +51,6 @@ INSERT INTO market_posts (user_id, perfume_id, title, brand, category, volume_ml
 -- (배송 정보는 테스트용 가짜 정보)
 INSERT INTO orders (post_id, buyer_id, price, receiver_name, receiver_phone, address, stage) VALUES
   (2, 2, 45000, '김향수', '010-1234-5678', '서울특별시 강남구 테헤란로 123, 101호', '구매신청');
+
+INSERT INTO payments (order_id, method, amount, status, merchant_uid, paid_at) VALUES
+  (1, '카드', 45000, '결제완료', 'PAY-20240101-0001', '2024-01-01 12:00:00');

@@ -174,6 +174,21 @@ export interface MarketPost {
   updatedAt: string;
 }
 
+export type PaymentMethod = '카드' | '카카오페이' | '네이버페이' | '계좌이체';
+export type PaymentStatus = '결제완료' | '환불완료';
+
+export const PAYMENT_METHODS: PaymentMethod[] = ['카드', '카카오페이', '네이버페이', '계좌이체'];
+
+export interface Payment {
+  id: number;
+  method: PaymentMethod;
+  amount: number;
+  status: PaymentStatus;
+  merchantUid: string;
+  paidAt: string;
+  refundedAt: string | null;
+}
+
 // GET /api/orders, /api/orders/my, /api/orders/sales, /api/orders/:id
 export interface Order {
   id: number;
@@ -188,6 +203,7 @@ export interface Order {
     seller: { id: number; nickname: string };
   };
   buyer: { id: number; nickname: string };
+  payment?: Payment | null;
   // 구매자 배송 정보 (구매자 본인과 관리자에게만 내려옴)
   receiverName?: string;
   receiverPhone?: string;

@@ -8,6 +8,7 @@ const Review = require('./review');
 const Favorite = require('./favorite');
 const MarketPost = require('./marketPost');
 const Order = require('./order');
+const Payment = require('./payment');
 const RecommendQuestion = require('./recommendQuestion');
 const RecommendHistory = require('./recommendHistory');
 const RevokedToken = require('./revokedToken');
@@ -39,6 +40,7 @@ const db = {
   Favorite,
   MarketPost,
   Order,
+  Payment,
   RecommendQuestion,
   RecommendHistory,
   RevokedToken,
@@ -50,6 +52,7 @@ Review.init(sequelize);
 Favorite.init(sequelize);
 MarketPost.init(sequelize);
 Order.init(sequelize);
+Payment.init(sequelize);
 RecommendQuestion.init(sequelize);
 RecommendHistory.init(sequelize);
 RevokedToken.init(sequelize);
@@ -60,6 +63,7 @@ Review.associate(db);
 Favorite.associate(db);
 MarketPost.associate(db);
 Order.associate(db);
+Payment.associate(db);
 RecommendQuestion.associate(db);
 RecommendHistory.associate(db);
 RevokedToken.associate(db);

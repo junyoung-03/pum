@@ -3,7 +3,15 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { api, errorMessage, formatDate, formatPrice } from '../api/client';
 import type { RootState } from '../data/store';
-import { MARKET_STATUS, MarketPost, MarketStatus, Order, Perfume } from '../data/perfumeData';
+import {
+  MARKET_STATUS,
+  MarketPost,
+  MarketStatus,
+  Order,
+  PAYMENT_METHODS,
+  PaymentMethod,
+  Perfume,
+} from '../data/perfumeData';
 import { Badge, Button, PerfumeImage } from '../components/shared';
 import Modal from '../components/Modal';
 import OrderSteps, { STAGE_GUIDE } from '../components/OrderSteps';
@@ -29,9 +37,12 @@ export default function MarketDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // 구매 모달
+  // 구매 모달 (1단계: 배송지 입력 → 2단계: 결제 수단 선택 및 모의 결제)
   const [buyOpen, setBuyOpen] = useState(false);
+  const [buyStep, setBuyStep] = useState<1 | 2>(1);
   const [receiver, setReceiver] = useState(emptyReceiver);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('카드');
+  const [agreed, setAgreed] = useState(false);
   const [buyError, setBuyError] = useState('');
   const [buying, setBuying] = useState(false);
 
@@ -120,12 +131,14 @@ export default function MarketDetailPage() {
       return;
     }
     setReceiver(emptyReceiver);
+    setBuyStep(1);
+    setPaymentMethod('카드');
+    setAgreed(false);
     setBuyError('');
     setBuyOpen(true);
   };
 
-  const handleBuy = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleNextStep = () => {
     const name = receiver.name.trim();
     const phone = receiver.phone.trim();
     const address = receiver.address.trim();
@@ -137,12 +150,39 @@ export default function MarketDetailPage() {
       setBuyError('전화번호는 010-1234-5678 형식으로 입력해 주세요.');
       return;
     }
+    setBuyError('');
+    setBuyStep(2);
+  };
+
+  const handleBuy = async (e: FormEvent) => {
+    e.preventDefault();
+    if (buyStep === 1) {
+      handleNextStep();
+      return;
+    }
+    if (!agreed) {
+      setBuyError('안전거래 결제 진행에 동의해 주세요.');
+      return;
+    }
+    const name = receiver.name.trim();
+    const phone = receiver.phone.trim();
+    const address = receiver.address.trim();
     setBuying(true);
+    setBuyError('');
     try {
-      await api<Order>('/orders', 'POST', { postId: post.id, name, phone, address });
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      const { data } = await api<Order>('/orders', 'POST', {
+        postId: post.id,
+        name,
+        phone,
+        address,
+        paymentMethod,
+        amount: post.price,
+      });
       await loadPost();
       setBuyOpen(false);
-      alert('구매 신청이 완료되었습니다. 판매자가 물품을 보내면 SCENTIQUE가 확인 후 배송해 드립니다.');
+      const uid = data.payment?.merchantUid ? ` (결제번호: ${data.payment.merchantUid})` : '';
+      alert(`${paymentMethod} 결제가 완료되었습니다${uid}.\n판매자가 물품을 보내면 SCENTIQUE가 확인 후 배송해 드립니다.`);
     } catch (err) {
       setBuyError(errorMessage(err));
       loadPost().catch(() => undefined);
@@ -297,7 +337,11 @@ export default function MarketDetailPage() {
         </div>
       </div>
 
-      <Modal open={buyOpen} title="구매하기" onClose={closeBuy}>
+      <Modal
+        open={buyOpen}
+        title={buyStep === 1 ? '구매하기 (1/2 배송지 입력)' : '안전거래 결제 (2/2 결제 수단 선택)'}
+        onClose={closeBuy}
+      >
         <form onSubmit={handleBuy} noValidate>
           <div className="modal-summary">
             <p className="modal-summary-title">{post.title}</p>
@@ -306,48 +350,114 @@ export default function MarketDetailPage() {
 
           {buyError && <p className="notice notice-error">{buyError}</p>}
 
-          <div className="form-group">
-            <label htmlFor="buy-name">이름</label>
-            <input
-              id="buy-name"
-              value={receiver.name}
-              onChange={(e) => setReceiver({ ...receiver, name: e.target.value })}
-              maxLength={30}
-              placeholder="받는 분 이름"
-              autoComplete="name"
-              autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="buy-phone">전화번호</label>
-            <input
-              id="buy-phone"
-              type="tel"
-              value={receiver.phone}
-              onChange={(e) => setReceiver({ ...receiver, phone: e.target.value })}
-              maxLength={13}
-              placeholder="010-1234-5678"
-              autoComplete="tel"
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="buy-address">배송주소</label>
-            <textarea
-              id="buy-address"
-              value={receiver.address}
-              onChange={(e) => setReceiver({ ...receiver, address: e.target.value })}
-              maxLength={200}
-              rows={3}
-              placeholder="도로명 주소와 상세 주소"
-              autoComplete="street-address"
-            />
-          </div>
+          {buyStep === 1 ? (
+            <>
+              <div className="form-group">
+                <label htmlFor="buy-name">이름</label>
+                <input
+                  id="buy-name"
+                  value={receiver.name}
+                  onChange={(e) => setReceiver({ ...receiver, name: e.target.value })}
+                  maxLength={30}
+                  placeholder="받는 분 이름"
+                  autoComplete="name"
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="buy-phone">전화번호</label>
+                <input
+                  id="buy-phone"
+                  type="tel"
+                  value={receiver.phone}
+                  onChange={(e) => setReceiver({ ...receiver, phone: e.target.value })}
+                  maxLength={13}
+                  placeholder="010-1234-5678"
+                  autoComplete="tel"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="buy-address">배송주소</label>
+                <textarea
+                  id="buy-address"
+                  value={receiver.address}
+                  onChange={(e) => setReceiver({ ...receiver, address: e.target.value })}
+                  maxLength={200}
+                  rows={3}
+                  placeholder="도로명 주소와 상세 주소"
+                  autoComplete="street-address"
+                />
+              </div>
 
-          <p className="modal-note">입력한 배송 정보는 SCENTIQUE(관리자)만 확인하며, 판매자에게는 공개되지 않습니다.</p>
+              <p className="modal-note">입력한 배송 정보는 SCENTIQUE(관리자)만 확인하며, 판매자에게는 공개되지 않습니다.</p>
 
-          <Button type="submit" variant="primary" size="large" className="btn-block" disabled={buying}>
-            {buying ? '처리 중...' : `${formatPrice(post.price)} 구매`}
-          </Button>
+              <Button type="button" variant="primary" size="large" className="btn-block" onClick={handleNextStep}>
+                다음: 결제 수단 선택
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="form-group">
+                <label>결제 수단</label>
+                <div className="payment-methods-grid">
+                  {PAYMENT_METHODS.map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      className={`payment-method-btn ${paymentMethod === method ? 'active' : ''}`}
+                      onClick={() => setPaymentMethod(method)}
+                      disabled={buying}
+                    >
+                      {method}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="payment-summary-box">
+                <div className="payment-summary-row">
+                  <span>받는 분</span>
+                  <strong>{receiver.name}</strong>
+                </div>
+                <div className="payment-summary-row">
+                  <span>선택한 결제 수단</span>
+                  <strong>{paymentMethod}</strong>
+                </div>
+                <div className="payment-summary-row total">
+                  <span>최종 결제 금액</span>
+                  <strong>{formatPrice(post.price)}</strong>
+                </div>
+              </div>
+
+              <label className="payment-agree-check">
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  disabled={buying}
+                />
+                <span>SCENTIQUE 안전거래 결제 및 검수 후 배송 진행에 동의합니다.</span>
+              </label>
+
+              <div className="modal-actions-row">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="large"
+                  onClick={() => {
+                    setBuyError('');
+                    setBuyStep(1);
+                  }}
+                  disabled={buying}
+                >
+                  이전
+                </Button>
+                <Button type="submit" variant="primary" size="large" className="btn-block" disabled={buying}>
+                  {buying ? '결제 승인 처리 중...' : `${formatPrice(post.price)} 결제하기`}
+                </Button>
+              </div>
+            </>
+          )}
         </form>
       </Modal>
     </div>

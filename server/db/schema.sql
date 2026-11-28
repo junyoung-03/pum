@@ -4,6 +4,7 @@
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS revoked_tokens;
+DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS market_posts;
 DROP TABLE IF EXISTS recommend_history;
@@ -152,4 +153,19 @@ CREATE TABLE orders (
   updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (post_id)  REFERENCES market_posts(id) ON DELETE CASCADE,
   FOREIGN KEY (buyer_id) REFERENCES users(id)        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 결제 (주문 1건당 모의 결제 1건, 향후 PG사 연동 시 payment_key 등 확장)
+CREATE TABLE payments (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  order_id      INT NOT NULL UNIQUE,
+  method        ENUM('카드', '카카오페이', '네이버페이', '계좌이체') NOT NULL DEFAULT '카드',
+  amount        INT NOT NULL,
+  status        ENUM('결제완료', '환불완료') NOT NULL DEFAULT '결제완료',
+  merchant_uid  VARCHAR(40) NOT NULL UNIQUE,
+  paid_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  refunded_at   DATETIME NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

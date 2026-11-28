@@ -53,8 +53,9 @@ router.post(
     const postId = Number(req.body.postId);
     if (!Number.isInteger(postId) || postId < 1) throw new HttpError(400, '구매할 판매글(postId)을 선택해 주세요.');
     const receiver = checkReceiver(req.body);
+    const { paymentMethod, amount } = req.body;
 
-    const created = await Order.purchase(postId, req.user.id, receiver);
+    const created = await Order.purchase(postId, req.user.id, receiver, { method: paymentMethod, amount });
     ok(res, created, 201);
   })
 );

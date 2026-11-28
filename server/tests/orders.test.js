@@ -192,13 +192,42 @@ describe('거래 /api/orders', () => {
     });
 
     test('취소된 판매글은 다시 구매 가능, 인계까지 끝난 거래는 관리자도 바로 취소 불가 (409)', async () => {
-      const buy = await request(app).post('/api/orders').set(bearer(dailyToken)).send({ postId: 1, ...receiver });
+      const buy = await request(app).post('/api/orders').set(bearer(dailyToken)).send({
+        postId: 1,
+        ...receiver,
+        paymentMethod: '카카오페이',
+        amount: 150000,
+      });
       expect(buy.status).toBe(201);
+      expect(buy.body.data.payment).toMatchObject({
+        method: '카카오페이',
+        amount: 150000,
+        status: '결제완료',
+      });
+      expect(buy.body.data.payment.merchantUid).toMatch(/^PAY-/);
+
       const id = buy.body.data.id;
       await request(app).patch(`/api/orders/${id}/ship`).set(bearer(loverToken));
       await request(app).patch(`/api/orders/${id}/receive`).set(bearer(adminToken));
       await request(app).patch(`/api/orders/${id}/deliver`).set(bearer(adminToken));
       expect((await request(app).delete(`/api/orders/${id}`).set(bearer(adminToken))).status).toBe(409);
+    });
+
+    test('모의 결제 검증: 잘못된 결제 수단(400) 또는 금액 불일치(400) 시 주문이 생성되지 않는다', async () => {
+      const badMethod = await request(app).post('/api/orders').set(bearer(dailyToken)).send({
+        postId: 3,
+        ...receiver,
+        paymentMethod: '비트코인',
+      });
+      expect(badMethod.status).toBe(400);
+
+      const badAmount = await request(app).post('/api/orders').set(bearer(dailyToken)).send({
+        postId: 3,
+        ...receiver,
+        paymentMethod: '네이버페이',
+        amount: 100,
+      });
+      expect(badAmount.status).toBe(400);
     });
   });
 });

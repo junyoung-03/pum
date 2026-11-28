@@ -1,5 +1,6 @@
 const Sequelize = require('sequelize');
 const { HttpError } = require('../utils/http');
+const { PAYMENT_METHODS } = require('../utils/constants');
 
 // 구매자 개인정보: 구매자 본인과 관리자에게만 응답
 const RECEIVER_FIELDS = ['receiverName', 'receiverPhone', 'address'];
@@ -70,12 +71,13 @@ module.exports = class Order extends Sequelize.Model {
   }
 
   static includes(sellerId) {
-    const { MarketPost, User } = this.sequelize.models;
+    const { MarketPost, User, Payment } = this.sequelize.models;
     return [
       { model: MarketPost, as: 'post', attributes: ['id', 'title', 'brand', 'perfumeId', 'status', 'userId'],
         ...(sellerId === undefined ? {} : { where: { userId: sellerId } }),
         include: [{ model: User, as: 'seller', attributes: ['id', 'nickname'] }] },
       { model: User, as: 'buyer', attributes: ['id', 'nickname'] },
+      { model: Payment, as: 'payment', attributes: ['id', 'method', 'amount', 'status', 'merchantUid', 'paidAt', 'refundedAt'] },
     ];
   }
 
@@ -103,15 +105,33 @@ module.exports = class Order extends Sequelize.Model {
     return this;
   }
 
-  // 구매 신청: 주문 생성 + 판매글 '예약중'을 하나의 트랜잭션으로 처리
-  static async purchase(postId, buyerId, receiver) {
-    const { MarketPost } = this.sequelize.models;
+  // 구매 신청: 주문 생성 + 모의 결제 생성 + 판매글 '예약중'을 하나의 트랜잭션으로 처리
+  static async purchase(postId, buyerId, receiver, paymentInfo = {}) {
+    const method = paymentInfo.method || '카드';
+    if (!PAYMENT_METHODS.includes(method)) {
+      throw new HttpError(400, `결제 수단은 ${PAYMENT_METHODS.join(', ')} 중 하나여야 합니다.`);
+    }
+    const { MarketPost, Payment } = this.sequelize.models;
     const orderId = await this.sequelize.transaction(async (t) => {
       const post = await MarketPost.findByPk(postId, { transaction: t, lock: t.LOCK.UPDATE });
       if (!post) throw new HttpError(404, '판매글을 찾을 수 없습니다.');
       if (post.userId === buyerId) throw new HttpError(403, '본인이 올린 판매글은 구매할 수 없습니다.');
       if (post.status !== '판매중') throw new HttpError(409, `이미 거래가 진행 중인 판매글입니다. (${post.status})`);
+      if (paymentInfo.amount !== undefined && Number(paymentInfo.amount) !== post.price) {
+        throw new HttpError(400, '결제 금액이 판매 가격과 일치하지 않습니다.');
+      }
       const order = await this.create({ ...receiver, postId: post.id, buyerId, price: post.price }, { transaction: t });
+      await Payment.create(
+        {
+          orderId: order.id,
+          method,
+          amount: post.price,
+          status: '결제완료',
+          merchantUid: Payment.generateMerchantUid(),
+          paidAt: new Date(),
+        },
+        { transaction: t }
+      );
       await post.update({ status: '예약중' }, { transaction: t });
       return order.id;
     });
@@ -180,5 +200,6 @@ module.exports = class Order extends Sequelize.Model {
   static associate(db) {
     db.Order.belongsTo(db.MarketPost, { foreignKey: 'postId', targetKey: 'id', as: 'post', onDelete: 'CASCADE', onUpdate: 'NO ACTION' });
     db.Order.belongsTo(db.User, { foreignKey: 'buyerId', targetKey: 'id', as: 'buyer', onDelete: 'CASCADE', onUpdate: 'NO ACTION' });
+    db.Order.hasOne(db.Payment, { foreignKey: 'orderId', sourceKey: 'id', as: 'payment', onDelete: 'CASCADE', onUpdate: 'NO ACTION' });
   }
 };
